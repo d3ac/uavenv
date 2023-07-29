@@ -55,7 +55,7 @@ class Jammerchannels:
         self.n_uav = n_uav
         self.n_channel = n_channel
 
-    def update_positions(self, positions, uav_positions):
+    def update_positions(self, positions, uav_positions): #!注意这个地方合并了之后,传入的参数的顺序变了
         self.positions = positions
         self.uav_positions = uav_positions
 
@@ -238,7 +238,7 @@ class Environ(gym.Env):
         self.low_height = 60
         self.high_height = 120
 
-        self.k = 0.8
+        self.moving_smooth_factor = 0.8
         self.sigma = 0.2
 
         #无人机、干扰机各种参数
@@ -269,8 +269,6 @@ class Environ(gym.Env):
         self.n_cm_for_a_ch = 2  # 每个ch的簇成员个数
         self.n_cm = self.n_ch * self.n_cm_for_a_ch  # UAV簇成员个数
         self.n_uav = self.n_ch + self.n_cm  # number of UAVs
-        self.n_rp_ch = self.n_ch
-        self.n_rp_cm = self.n_cm
         self.n_rp = self.n_uav  # 簇成员的参考节点个数
         self.n_des = self.n_cm_for_a_ch  # 每个ch的通信目标数
         self.n_uav_pair = self.n_ch * self.n_des  # 一共6个通信对
@@ -557,8 +555,8 @@ class Environ(gym.Env):
                     tra_id = self.uav_pairs[i][j][0]        # 接收机和发射机
                     rec_id = self.uav_pairs[i][j][1]
                     csi[i][j] = (self.UAVchannels_with_fastfading[tra_id][rec_id] - 80) / 60
-            uav_channels = self.uav_channels / self.n_channel
-            uav_powers = self.uav_powers / self.uav_power_max
+            uav_channels = self.uav_channels / self.n_channel #! 这里也是
+            uav_powers = self.uav_powers / self.uav_power_max #! 这样归一化有问题呀
             jammer_channels = np.asarray([x / self.n_channel for x in self.jammer_channels])      #for item in list,获取列表中的每一项
             for i in range(self.n_ch):
                 joint_state.append(np.concatenate((csi[i].reshape([-1]), uav_channels.reshape([-1]),
@@ -839,14 +837,14 @@ class Environ(gym.Env):
                 self.uavs[i].position = [xpos, ypos, zpos]
                 self.rps[i].position = self.uavs[i].position
 
-                self.uavs[i].velocity = self.k * self.uavs[i].velocity + (1 - self.k) * np.average(
+                self.uavs[i].velocity = self.moving_smooth_factor * self.uavs[i].velocity + (1 - self.moving_smooth_factor) * np.average(
                     self.uavs[i].uav_velocity) + (
-                                                1 - self.k ** 2) ** 0.5 * np.random.normal(0, self.sigma)
-                self.uavs[i].direction = self.k * self.uavs[i].direction + (1 - self.k) * np.average(
+                                                1 - self.moving_smooth_factor ** 2) ** 0.5 * np.random.normal(0, self.sigma)
+                self.uavs[i].direction = self.moving_smooth_factor * self.uavs[i].direction + (1 - self.moving_smooth_factor) * np.average(
                     self.uavs[i].uav_direction) + (
-                                                 1 - self.k ** 2) ** 0.5 * np.random.normal(0, self.sigma)
-                self.uavs[i].p = self.k * self.uavs[i].p + (1 - self.k) * np.average(self.uavs[i].uav_p) + (
-                            1 - self.k ** 2) ** 0.5 * np.random.normal(0, self.sigma)
+                                                 1 - self.moving_smooth_factor ** 2) ** 0.5 * np.random.normal(0, self.sigma)
+                self.uavs[i].p = self.moving_smooth_factor * self.uavs[i].p + (1 - self.moving_smooth_factor) * np.average(self.uavs[i].uav_p) + (
+                            1 - self.moving_smooth_factor ** 2) ** 0.5 * np.random.normal(0, self.sigma)
 
                 self.uavs[i].uav_velocity.append(self.uavs[i].velocity)
                 self.uavs[i].uav_direction.append(self.uavs[i].direction)
@@ -998,12 +996,12 @@ class Environ(gym.Env):
 
                 self.jammers[i].position = [xpos, ypos, zpos]
 
-                self.jammers[i].velocity = self.k * self.jammers[i].velocity + (1 - self.k) * np.average(
-                    self.jammers[i].jammer_velocity) + (1 - self.k) ** 0.5 * np.random.normal(0, self.sigma)
-                self.jammers[i].direction = self.k * self.jammers[i].direction + (1 - self.k) * np.average(
-                    self.jammers[i].jammer_direction) + (1 - self.k) ** 0.5 * np.random.normal(0, self.sigma)
-                self.jammers[i].p = self.k * self.jammers[i].p + (1 - self.k) * np.average(self.jammers[i].jammer_p) + (
-                            1 - self.k) ** 0.5 * np.random.normal(0, self.sigma)
+                self.jammers[i].velocity = self.moving_smooth_factor * self.jammers[i].velocity + (1 - self.moving_smooth_factor) * np.average(
+                    self.jammers[i].jammer_velocity) + (1 - self.moving_smooth_factor) ** 0.5 * np.random.normal(0, self.sigma)
+                self.jammers[i].direction = self.moving_smooth_factor * self.jammers[i].direction + (1 - self.moving_smooth_factor) * np.average(
+                    self.jammers[i].jammer_direction) + (1 - self.moving_smooth_factor) ** 0.5 * np.random.normal(0, self.sigma)
+                self.jammers[i].p = self.moving_smooth_factor * self.jammers[i].p + (1 - self.moving_smooth_factor) * np.average(self.jammers[i].jammer_p) + (
+                            1 - self.moving_smooth_factor) ** 0.5 * np.random.normal(0, self.sigma)
 
                 self.jammers[i].jammer_velocity.append(self.jammers[i].velocity)
                 self.jammers[i].jammer_direction.append(self.jammers[i].direction)
