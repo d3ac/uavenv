@@ -1,5 +1,7 @@
 import gym
+from gym import spaces
 import numpy as np
+import random
 
 class UAVposition:
     """
@@ -88,9 +90,6 @@ class UAV(gym.Env):
         self.width = width
         self.low_height = low_height
         self.high_height = high_height
-        # uav移动参数
-        self.moving_smooth_factor = 0.8
-        self.moving_smooth_sigma = moving_smooth_sigma
         # uav, jammer的参数
         self.uav_power_list = uav_power_list
         self.jammer_power = jammer_power #TODO 这个可以改成一个列表，表示多个干扰器的功率
@@ -99,10 +98,40 @@ class UAV(gym.Env):
         self.jammer_dBi = jammer_dBi
         self.uav_Noise_Factor = uavNoiseFactor
         self.bandwidth = bandwidth
-        # 移动模型
-        self.n_clusters = n_clusters # UAV的集群数
-        self.n_cluster_members = n_cluster_members # 每个集群的成员数(不包括簇头)
+        # uav & jammer & channel数量
+        self.n_clusters = n_clusters # UAV簇的个数
+        self.n_cluster_members = n_cluster_members # 每个簇的成员数(不包括簇头)
         self.n_members = self.n_clusters * self.n_cluster_members # 总的成员数
         self.n_uavs = self.n_members + self.n_clusters
         self.n_channel_users = self.n_cluster_members #! 每个信道的用户数 (这个是不是有问题?可能还要加一)
-        self.n_
+        self.n_jammers = n_jammers # 干扰器的数量
+        self.n_channels = n_channels #! 信道的数量 瞅瞅这个在那里用到了, 有什么用, 原来代码里面的注释是直接算出来的
+        # 观测模型
+        self.prob_missed_detection = 0   # 漏检概率
+        self.prob_false_alarm = 0        # 误检概率
+        # 移动参数
+        self.moving_smooth_factor = 0.8
+        self.moving_smooth_sigma = moving_smooth_sigma
+        self.max_rp_distance = max_rp_distance # 簇内的参考节点围绕中心运动时的最大允许距离
+        self.max_uav_distance = max_uav_distance # 簇内的无人机围绕中心运动时的最大允许距离
+        self.is_jammer_moving = is_jammer_moving # 干扰器是否移动
+        self.interference_type = interference_type # 干扰类型
+        self.policy = policy #! 策略, 这个我觉得不应该放在这个地方, 应该放在外面, 后面改改
+        # 保存cluster数据
+        self.uav_list = list(range(self.n_uavs))
+        self.master_list = random.sample(self.uav_list, k=self.n_clusters) # 随机选择簇头
+        self.member_list = list(set(self.uav_list) - set(self.master_uav_list)) #成员列表
+        self.uav_pairs = np.zeros([self.n_clusters], dtype=np.int32)
+        self.uav_clusters = np.zeros([self.n_clusters, self.n_cluster_members, 2], dtype=np.int32)
+        # action
+        self.action_range = self.n_channels * len(self.uav_power_list) #! 选择信道和功率,组合成为动作空间, 这个可以改改
+        self.action_dim = self.action_range ** self.n_channel_users #!很怪
+        self.action_space = [spaces.Discrete(self.action_dim) for _ in range(self.n_clusters)] # 也可以改改
+        # reward
+        self.uav_hopping_cnt = np.zeros([self.n_clusters], dtype=np.int32) #! 跳频次数 不过我觉得可以改成如果选择跳频再定义他
+        self.energy_reward = 0
+        self.hopping_reward = 0
+        #!他这个后面还有依托东西
+    
+    def a(self):
+        self.observed_state_list = []

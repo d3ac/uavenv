@@ -228,7 +228,7 @@ class Agent:
             q, new_hidden = self.drqn.forward(obs, hidden)
             action = random.randint(0, self.N_action-1)
         return action, new_hidden
-
+#!为什么不把multiagent当作multitask呢
 class Environ(gym.Env):
     def __init__(self):
         self.seed_set()
@@ -271,19 +271,15 @@ class Environ(gym.Env):
         self.n_uav = self.n_ch + self.n_cm  # number of UAVs
         self.n_rp = self.n_uav  # 簇成员的参考节点个数
         self.n_des = self.n_cm_for_a_ch  # 每个ch的通信目标数
-        self.n_uav_pair = self.n_ch * self.n_des  # 一共6个通信对
         self.n_jammer = 2  # number of jammers
         self.n_channel = 6  # int(self.n_ch+self.n_jammer-1)  # number of channels
-        self.channel_indexes = np.arange(self.n_channel)
-        self.channels = np.zeros([self.n_channel], dtype=np.int32)
-        self.states_observed = 2  # 信道被干扰或未被干扰
+        self.channel_indexes = np.arange(self.n_channel) #! 我觉得到时候再写 
 
         self.p_md = 0  # 漏警概率
         self.p_fa = 0  # 虚警概率
-        self.pn0 = 20  # 数据包长度
 
-        self.max_distance1 = 99#群组内节点的RP围绕逻辑中心运动时最大允许的半径
-        self.max_distance2 = 1#每个节点围绕其RP运动时最大允许的半径
+        self.max_distance1 = 99 #群组内节点的RP围绕逻辑中心运动时最大允许的半径
+        self.max_distance2 = 1  #每个节点围绕其RP运动时最大允许的半径
         self.is_jammer_moving = True
         self.type_of_interference = "saopin"
         # "markov"首先干扰机通过检测智能体的主要变化,
@@ -295,11 +291,9 @@ class Environ(gym.Env):
         self.training = True
 
         self.uav_list = list(np.arange(self.n_uav))
-        self.ch_list = random.sample(self.uav_list, k=self.n_ch)#由于随机数种子的原因，每次都选择2、7、3作为簇头
+        self.ch_list = random.sample(self.uav_list, k=self.n_ch) #由于随机数种子的原因，每次都选择2、7、3作为簇头
         self.cm_list = list(set(self.uav_list) - set(self.ch_list))
-        self.rp_list = self.uav_list
-        self.rp_ch_list = self.ch_list
-        self.rp_cm_list = self.cm_list
+        self.rp_cm_list = self.cm_list #! 讲道理这个没用
         self.uav_pairs = np.zeros([self.n_ch, self.n_des, 2], dtype=np.int32)
         self.uav_clusters = np.zeros([self.n_ch, self.n_cm_for_a_ch, 2], dtype=np.int32)
 
@@ -317,7 +311,7 @@ class Environ(gym.Env):
         #添加智能体
         n_episode = 1500
         n_steps = 1000
-        self.agents = [Agent(i, self.action_dim, max_epi_num=200,max_epi_len=n_steps) for i in range(self.n_ch)]
+        self.agents = [Agent(i, self.action_dim, max_epi_num=200, max_epi_len=n_steps) for i in range(self.n_ch)]
 
         self.n_step = 0
 
@@ -342,6 +336,7 @@ class Environ(gym.Env):
                 self.all_observed_states_list.extend(list(combinations(self.channel_indexes, self.n_jammer)))
 
             elif self.p_md > 0 and self.p_fa == 0:  # 漏警
+                #!没看懂是怎么漏的
                 for i in range(self.n_jammer + 1):
                     self.observed_state_dim += int(comb(self.n_channel, i))
                     self.all_observed_states_list.extend(list(combinations(self.channel_indexes, i)))
@@ -350,6 +345,7 @@ class Environ(gym.Env):
                 for i in range(self.n_jammer, self.n_channel + 1):
                     self.observed_state_dim += int(comb(self.n_channel, i))
                     self.all_observed_states_list.extend(list(combinations(self.channel_indexes, i)))
+            #!为什么没有两个都可以漏的概率?
 
         elif self.type_of_interference == "markov":
             self.all_jammer_states_list = []
@@ -364,7 +360,7 @@ class Environ(gym.Env):
                 self.observed_state_dim = int(comb(self.n_channel, self.n_jammer))#comb返回从n_channel种可能性中选择n_jammer个无序结果的方式数量，无重复，也称为组合。
                 self.all_observed_states_list.extend(list(combinations(self.channel_indexes, self.n_jammer)))
 
-    def renew_uavs(self):
+    def renew_uavs(self): # 初始化簇头
         for i in range(self.n_ch):
             # 更新簇头无人机的速度、方向、夹角
             ch_id = self.ch_list[i]
@@ -385,7 +381,7 @@ class Environ(gym.Env):
             self.uavs[ch_id].uav_p.append(start_p)
 
     def renew_uav_clusters(self):
-        cm_list = deepcopy(self.cm_list)#将复制对象完全复制一遍，并作为一个独立的新个体单元存在。即使改变被复制对象，deepcopy新个体也不会发生变化
+        cm_list = deepcopy(self.cm_list) #将复制对象完全复制一遍，并作为一个独立的新个体单元存在。即使改变被复制对象，deepcopy新个体也不会发生变化
         rp_cm_list = deepcopy(self.rp_cm_list)
         for i in range(self.n_ch):
             ch_id = self.ch_list[i]
@@ -498,7 +494,7 @@ class Environ(gym.Env):
         self.jammer_channels_list = []
         self.jammer_index_list = []
         #如果传输阶段先后干扰两个信道,0是后半段 改变后的信道，1是前半段 改变前的信道
-        self. jammer_time = np.zeros([2])  # 每个干扰机在传输阶段最多先后干扰两个信道，目前假设各个干扰机时间线相同
+        self. jammer_time = np.zeros([2])  #! 每个干扰机在传输阶段最多先后干扰两个信道，目前假设各个干扰机时间线相同
 
         #print("jammer_channels", self.jammer_channels)
 
@@ -680,8 +676,7 @@ class Environ(gym.Env):
         self.t_uav += self.t_Rx
         self.t_jammer += self.t_Rx
         # self.jammer_channels_list = []
-        if np.floor_divide((self.t_jammer - self.t_Rx), self.t_dwell) == np.floor_divide(self.t_jammer,
-                                                                                         self.t_dwell) - 1: #这一步是要判断什么
+        if np.floor_divide((self.t_jammer - self.t_Rx), self.t_dwell) == np.floor_divide(self.t_jammer, self.t_dwell) - 1: #这一步是要判断什么
         # （干扰机时间-传输时间0.98）/干扰机扫频停留时间2.28 == 干扰机时间/干扰机扫频停留时间 - 1
             if self.type_of_interference == "saopin":
                 for i in range(self.n_jammer):
@@ -1021,10 +1016,10 @@ class Environ(gym.Env):
         self.UAVchannels.update_pathloss()
         self.Jammerchannels.update_fast_fading()
         self.UAVchannels.update_fast_fading()
+
         UAVchannels_with_fastfading = np.repeat(self.UAVchannels.PathLoss[:, :, np.newaxis], self.n_channel, axis=2)
         self.UAVchannels_with_fastfading = UAVchannels_with_fastfading - self.UAVchannels.FastFading
-        Jammerchannels_with_fastfading = np.repeat(self.Jammerchannels.PathLoss[:, :, np.newaxis], self.n_channel,
-                                                   axis=2)
+        Jammerchannels_with_fastfading = np.repeat(self.Jammerchannels.PathLoss[:, :, np.newaxis], self.n_channel, axis=2)
         self.Jammerchannels_with_fastfading = Jammerchannels_with_fastfading - self.Jammerchannels.FastFading
 
     def act(self):
@@ -1119,5 +1114,3 @@ class Environ(gym.Env):
         plt.xlabel('training Episode')
         # plt.ylim(0.5, 1.0)
         plt.show()
-
-
