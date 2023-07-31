@@ -6,15 +6,15 @@ class UAVMoving(object):
     实现一个uav簇群的移动
     """
     def __init__(
-        self, num_slaves=3, init_position=None, xlim=1000, ylim=1000, zlim_max=200, zlim_min=50, max_radius=30,
+        self, n_slaves=3, init_position=None, xlim=1000, ylim=1000, zlim_max=200, zlim_min=50, max_radius=30,
         master_velocity=10, slave_velocity=10, moving_factor=0.1, dt=0.1, **kwargs
     ):
         # 储存位置信息
-        self.num_slaves = num_slaves
-        self.position = np.zeros(shape=(num_slaves+1, 3))
-        self.azimuth = np.zeros(shape=(num_slaves+1,))
-        self.elevation = np.zeros(shape=(num_slaves+1,))
-        self.velocity = np.zeros(shape=(num_slaves+1,))
+        self.n_slaves = n_slaves
+        self.position = np.zeros(shape=(n_slaves+1, 3))
+        self.azimuth = np.zeros(shape=(n_slaves+1,))
+        self.elevation = np.zeros(shape=(n_slaves+1,))
+        self.velocity = np.zeros(shape=(n_slaves+1,))
         # 移动参数
         self.master_velocity = master_velocity 
         self.slave_velocity = slave_velocity
@@ -34,7 +34,7 @@ class UAVMoving(object):
 
     def _init_position(self, init_potision=None):
         self.position[0] = init_potision if init_potision is not None else (random.uniform(0,self.xlim),random.uniform(0,self.ylim),random.uniform(self.zlim_min,self.zlim_max))
-        for i in range(1, self.num_slaves+1):
+        for i in range(1, self.n_slaves+1):
             azimuth =  2 * np.pi * np.random.random()
             elevation = np.pi * np.random.random()
             radius = self.max_radius * np.cbrt(np.random.random()) # 开立方根生成的半径才能保证在立方体内均匀分布
@@ -44,7 +44,7 @@ class UAVMoving(object):
             self.position[i] = (x,y,z)
     
     def _init_moving_params(self):
-        for i in range(self.num_slaves+1):
+        for i in range(self.n_slaves+1):
             self.azimuth[i] = 2 * np.pi * np.random.random()
             self.elevation[i] = np.pi * np.random.random()
             self.velocity[i] = 2 * self.slave_velocity * np.random.random()
@@ -64,11 +64,11 @@ class UAVMoving(object):
 
     def step(self):
         self._step((0,), self.master_velocity)
-        self._step(range(1, self.num_slaves+1), self.slave_velocity)
+        self._step(range(1, self.n_slaves+1), self.slave_velocity)
 
 class JammerMoving(object):
     def __init__(
-        self,n_jammers=5, init_position=None, xlim=1000, ylim=1000, zlim_max=200, zlim_min=50,
+        self,n_jammers=3, init_position=None, xlim=1000, ylim=1000, zlim_max=200, zlim_min=50,
         jammer_velocity=10, moving_factor=0.1, dt=0.1
     ):
         self.n_jammers = n_jammers
