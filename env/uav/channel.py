@@ -69,30 +69,30 @@ class Channel(object):
     所有簇群的信道类
     """
     def __init__(
-        self, n_groups=3, n_channels=6, n_slaves=3, area_type="small_and_medium_size_cities", fc=800*1e6, hb=50, hm=20, **kwargs
+        self, n_clusters=3, n_channels=6, n_slaves=3, area_type="small_and_medium_size_cities", fc=800*1e6, hb=50, hm=20, **kwargs
     ):
-        self.n_groups = n_groups
+        self.n_clusters = n_clusters
         self.n_channels = n_channels 
         self.n_slaves = n_slaves
         self.area_type = area_type
         self.fc = fc
         self.hb = hb
         self.hm = hm
-        self.pathloss = np.zeros(shape=(n_groups, n_groups))
-        self.FastFading = np.zeros(shape=(n_groups, n_groups, n_channels))
-        self.Clusters = [ClusterChannel(n_channels, n_slaves, area_type, fc, hb, hm) for _ in range(n_groups)]
+        self.pathloss = np.zeros(shape=(n_clusters, n_clusters))
+        self.FastFading = np.zeros(shape=(n_clusters, n_clusters, n_channels))
+        self.Clusters = [ClusterChannel(n_channels, n_slaves, area_type, fc, hb, hm) for _ in range(n_clusters)]
         self.calc_pathloss()
         self.calc_fast_fading()
 
     def calc_pathloss(self):
         A, B, C = calc_pathloss_params(self.fc, self.hb, self.hm, self.area_type)
-        for i in range(self.n_groups):
-            for j in range(self.n_groups):
+        for i in range(self.n_clusters):
+            for j in range(self.n_clusters):
                 d = np.sqrt(np.sum(np.square(self.Clusters[i].position[0] - self.Clusters[j].position[0]))) + 1e-3
                 self.pathloss[i][j] = max(A + B * np.log10(d) + C, 0)
 
     def calc_fast_fading(self):
-        h = generate_complex_gaussian(size=(self.n_groups, self.n_groups, self.n_channels)) / np.sqrt(2)
+        h = generate_complex_gaussian(size=(self.n_clusters, self.n_clusters, self.n_channels)) / np.sqrt(2)
         self.FastFading = 20 * np.log10(np.abs(h))
 
 class JammerChannel(JammerMoving):
