@@ -6,7 +6,7 @@ class UAVMoving(object):
     实现一个uav簇群的移动
     """
     def __init__(
-        self, n_slaves=3, init_position=None, xlim=1000, ylim=1000, zlim_max=200, zlim_min=50, max_radius=30,
+        self, n_slaves=3, init_position=None, xlim=1000, ylim=1000, zlim_max=200, zlim_min=50, max_radius=50,
         master_velocity=10, slave_velocity=10, moving_factor=0.1, dt=0.1, **kwargs
     ):
         # 储存位置信息

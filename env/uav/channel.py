@@ -37,6 +37,7 @@ class ClusterChannel(UAVMoving):
         self, n_channels=6, n_slaves=3, area_type="small_and_medium_size_cities", fc=800*1e6, hb=50, hm=20, **kwargs
     ):
         super().__init__(**kwargs)
+        # 通信参数
         self.n_channels = n_channels
         self.n_slaves = n_slaves
         self.area_type = area_type
@@ -45,6 +46,9 @@ class ClusterChannel(UAVMoving):
         self.hm = hm
         self.pathloss = np.zeros(shape=(n_slaves,))
         self.FastFading = np.zeros(shape=(n_slaves, n_channels))
+        # action
+        self.power_list = np.zeros(shape=(n_slaves,), dtype=np.int32)
+        self.channel_list = np.zeros(shape=(n_slaves,), dtype=np.int32)
         if n_channels < n_slaves:
             raise ValueError("The number of channels should be greater than the number of slaves.")
         self.calc_pathloss()
