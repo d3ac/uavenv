@@ -1,19 +1,19 @@
 import numpy as np
-
+from env.uav.moving import UAVMoving
 
 def generate_complex_gaussian(size): # 生成复数高斯噪声
     real_part = np.random.normal(0, 1, size)
     imag_part = np.random.normal(0, 1, size)
     return real_part + 1j*imag_part
 
-class UAVChannel(object):
+class ClusterChannel(UAVMoving):
     """
     一个簇群的信道类
     """
     def __init__(
-        self, n_channels=6, n_slaves=3, area_type="small_and_medium_size_cities", fc=800*1e6, hb=50, hm=20
+        self, n_channels=6, n_slaves=3, area_type="small_and_medium_size_cities", fc=800*1e6, hb=50, hm=20, **kwargs
     ):
-        # !这里涉及到一个问题就是hb和hm到底怎么办
+        super().__init__(**kwargs)
         self.n_channels = n_channels
         self.n_slaves = n_slaves
         self.area_type = area_type
@@ -23,11 +23,14 @@ class UAVChannel(object):
         self.pathloss = np.zeros(shape=(n_slaves,))
         if n_channels < n_slaves:
             raise ValueError("The number of channels should be greater than the number of slaves.")
+        self.calc_pathloss(self.position)
+        self.calc_fast_fading()
     
     def calc_pathloss(self, positions):
         """
         计算master和slaves的pathloss, 使用Okumura-Hata模型 https://www.wiley.com/legacy/wileychi/molisch/supp2/appendices/c07_Appendices.pdf
         默认参数计算出的数据 : A:110.2, B:33.8
+        ! 注意实际上使用Okumura-Hata模型有一点不合适
         """
         # calculate pathloss parameters
         if self.area_type == "small_and_medium_size_cities":
@@ -54,3 +57,16 @@ class UAVChannel(object):
     def calc_fast_fading(self):
         h = generate_complex_gaussian(size=(self.n_slaves, self.n_channels)) / np.sqrt(2) # 每一个slave对于所有的信道都先算出来
         self.FastFading = 20 * np.log10(np.abs(h))
+
+class MasterChannel(object):
+    def __init__(
+        self, n_groups=3, n_channels=6, n_slaves=3, area_type="small_and_medium_size_cities", fc=800*1e6, hb=50, hm=20, **kwargs
+    ):
+        self.n_groups = n_groups
+        self.n_channels = n_channels 
+        self.n_slaves = n_slaves
+        self.area_type = area_type
+        self.fc = fc
+        self.hb = hb
+        self.hm = hm
+        self.Clusters = [ClusterChannel(n_channels, n_slaves, area_type, fc, hb, hm) for _ in range(n_groups)]
