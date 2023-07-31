@@ -134,18 +134,15 @@ class JammerChannel(JammerMoving):
 
     def step(self):
         super().step() # 更新位置
-        if self.jamming_mode == 'Markov':
-            for i in range(self.n_jammers):
-                self.channels_jammed[self.jamming_channel[i]] -= 1
-                self.jamming_channel[i] = np.random.choice(self.n_channels, p=self.transition_matrix[i])
-                self.channels_jammed[self.jamming_channel[i]] += 1
-        elif self.jamming_mode == 'Sweeping':
-            for i in range(self.n_jammers):
-                self.channels_jammed[self.jamming_channel[i]] -= 1
-                self.jamming_channel[i] = (self.jamming_channel[i] + 1) % self.n_channels
-                self.channels_jammed[self.jamming_channel[i]] += 1
-        elif self.jamming_mode == 'Random':
-            for i in range(self.n_jammers):
-                self.channels_jammed[self.jamming_channel[i]] -= 1
-                self.jamming_channel[i] = np.random.randint(self.n_channels)
-                self.channels_jammed[self.jamming_channel[i]] += 1
+        def next_channel(i):
+            if self.jamming_mode == 'Markov':
+                return np.random.choice(self.n_channels, p=self.transition_matrix[i])
+            elif self.jamming_mode == 'Sweeping':
+                return (self.jamming_channel[i] + 1) % self.n_channels
+            elif self.jamming_mode == 'Random':
+                return np.random.randint(self.n_channels)
+        
+        for i in range(self.n_jammers):
+            self.channels_jammed[self.jamming_channel[i]] -= 1
+            self.jamming_channel[i] = next_channel(i)
+            self.channels_jammed[self.jamming_channel[i]] += 1
