@@ -6,6 +6,9 @@ def generate_complex_gaussian(size): # 生成复数高斯噪声
     imag_part = np.random.normal(0, 1, size)
     return real_part + 1j*imag_part
 
+def distance(p1, p2):
+    return np.sqrt(np.sum(np.square(p1-p2)))
+
 def calc_pathloss_params(fc, hb, hm, area_type="small_and_medium_size_cities"):
     """
     使用Okumura-Hata模型 https://www.wiley.com/legacy/wileychi/molisch/supp2/appendices/c07_Appendices.pdf
@@ -54,16 +57,28 @@ class ClusterChannel(UAVMoving):
             raise ValueError("The number of channels should be greater than the number of slaves.")
         self.calc_pathloss()
         self.calc_fast_fading()
+        self.A, self.B, self.C = calc_pathloss_params(self.fc, self.hb, self.hm, self.area_type)
+    
+    def cluster_pathloss_interference(self, k):
+        """
+        计算簇群内部的干扰, 第k个slave受到的干扰
+        """
+        ans = 0
+        for i in range(self.n_slaves):
+            if k == i or self.channel_select[k] != self.channel_select[i]:
+                continue
+            d = distance(self.position[k+1], self.position[i+1]) + distance(self.position[i+1], self.position[0]) + 1e-3
+            ans += max(self.A + self.B * np.log10(d) + self.C, 0)
+        return ans
     
     def calc_pathloss(self):
         """
         计算master和slaves的pathloss
         ! 注意实际上使用Okumura-Hata模型有一点不合适
         """
-        A, B, C = calc_pathloss_params(self.fc, self.hb, self.hm, self.area_type)
         for i in range(len(self.n_slaves)):
-            d = np.sqrt(np.sum(np.square(self.position[i+1] - self.position[0]))) + 1e-3
-            self.pathloss[i] = max(A + B * np.log10(d) + C, 0) # 防止出现负数
+            d = distance(self.position[i+1], self.position[0]) + 1e-3
+            self.pathloss[i] = max(self.A + self.B * np.log10(d) + self.C, 0) # 防止出现负数
     
     def calc_fast_fading(self):
         h = generate_complex_gaussian(size=(self.n_slaves, self.n_channels)) / np.sqrt(2) # 每一个slave对于所有的信道都先算出来
@@ -109,13 +124,13 @@ class Channel(object):
         
         self.calc_pathloss()
         self.calc_fast_fading()
+        self.A, self.B, self.C = calc_pathloss_params(self.fc, self.hb, self.hm, self.area_type)
 
     def calc_pathloss(self):
-        A, B, C = calc_pathloss_params(self.fc, self.hb, self.hm, self.area_type)
         for i in range(self.n_clusters):
             for j in range(self.n_clusters):
-                d = np.sqrt(np.sum(np.square(self.Clusters[i].position[0] - self.Clusters[j].position[0]))) + 1e-3
-                self.pathloss[i][j] = max(A + B * np.log10(d) + C, 0)
+                d = distance(self.Clusters[i].position[0], self.Clusters[j].position[0]) + 1e-3
+                self.pathloss[i][j] = max(self.A + self.B * np.log10(d) + self.C, 0)
 
     def calc_fast_fading(self):
         h = generate_complex_gaussian(size=(self.n_clusters, self.n_clusters, self.n_channels)) / np.sqrt(2)

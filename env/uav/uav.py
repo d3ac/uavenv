@@ -53,11 +53,18 @@ class systemEnv(gym.Env):
         pass
     
     def calc_gain(self):
-        pass
+        # 计算每个slave的增益
+        for i in range(self.n_clusters):
+            for j in range(self.n_slaves):
+                jam, gain = 0, 0
+                # 同一个cluster内的
+                for k in range(self.n_slaves): #! 对于同一个cluster内的slave, 我觉得可以考虑在同一个信道里面通信, 同一个信道里面最多可以通信x个, 多了就会干扰, 当然在这里我们还是说一个信道就干扰
+                    
+
 
     def observe(self):
         channel, power, position = self.channel.observe()
-        gain = self.calc_gain()
+        gain = self.calc_gain() #! 这个实际上应该是 power和速率的某个函数
         return (channel, power, position, gain)
 
     def reset(self):
