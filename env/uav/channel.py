@@ -34,7 +34,7 @@ class ClusterChannel(UAVMoving):
     一个簇群的信道类
     """
     def __init__(
-        self, n_channels=6, n_slaves=3, area_type="small_and_medium_size_cities", fc=800*1e6, hb=50, hm=20, **kwargs
+        self, n_channels=6, n_slaves=3, area_type="small_and_medium_size_cities", fc=800*1e6, hb=50, hm=20, power_list=[36, 33, 30, 27],**kwargs
     ):
         super().__init__(**kwargs)
         # 通信参数
@@ -47,8 +47,9 @@ class ClusterChannel(UAVMoving):
         self.pathloss = np.zeros(shape=(n_slaves,))
         self.FastFading = np.zeros(shape=(n_slaves, n_channels))
         # action
-        self.power_list = np.zeros(shape=(n_slaves,), dtype=np.int32)
-        self.channel_list = np.zeros(shape=(n_slaves,), dtype=np.int32)
+        self.power_list = power_list
+        self.channel_power = np.zeros(shape=(n_slaves,), dtype=np.int32)
+        self.channel_select = np.zeros(shape=(n_slaves,), dtype=np.int32)
         if n_channels < n_slaves:
             raise ValueError("The number of channels should be greater than the number of slaves.")
         self.calc_pathloss()
@@ -67,13 +68,29 @@ class ClusterChannel(UAVMoving):
     def calc_fast_fading(self):
         h = generate_complex_gaussian(size=(self.n_slaves, self.n_channels)) / np.sqrt(2) # 每一个slave对于所有的信道都先算出来
         self.FastFading = 20 * np.log10(np.abs(h))
+    
+    def act(self, channel=None, channel_power=None, init=False):
+        if not init:
+            self.channel_power = channel_power
+            cnt = 0
+            for i in range(self.n_slaves):
+                if self.channel_select[i] != channel[i]:
+                    self.channel_select[i] = channel[i]
+                    cnt += 1
+            return cnt
+        else:
+            self.channel_power = [np.random.choice(self.power_list) for _ in range(self.n_slaves)]
+            self.channel_select = np.random.choice(self.n_channels, size=(self.n_slaves,), replace=False)
+    
+    def observe(self):
+        return (self.channel_select, self.channel_power, self.position)
 
 class Channel(object):
     """
     所有簇群的信道类
     """
     def __init__(
-        self, n_clusters=3, n_channels=6, n_slaves=3, area_type="small_and_medium_size_cities", fc=800*1e6, hb=50, hm=20, **kwargs
+        self, n_clusters=3, n_channels=6, n_slaves=3, area_type="small_and_medium_size_cities", fc=800*1e6, hb=50, hm=20, power_list=[36, 33, 30, 27], **kwargs
     ):
         self.n_clusters = n_clusters
         self.n_channels = n_channels 
@@ -82,9 +99,14 @@ class Channel(object):
         self.fc = fc
         self.hb = hb
         self.hm = hm
+        self.power_list = power_list
+
+        self.channel_select = np.zeros(shape=(n_clusters, n_clusters), dtype=np.int32)
+        self.channel_power = np.zeros(shape=(n_clusters,), dtype=np.int32)
         self.pathloss = np.zeros(shape=(n_clusters, n_clusters))
         self.FastFading = np.zeros(shape=(n_clusters, n_clusters, n_channels))
         self.Clusters = [ClusterChannel(n_channels, n_slaves, area_type, fc, hb, hm) for _ in range(n_clusters)]
+        
         self.calc_pathloss()
         self.calc_fast_fading()
 
@@ -98,13 +120,53 @@ class Channel(object):
     def calc_fast_fading(self):
         h = generate_complex_gaussian(size=(self.n_clusters, self.n_clusters, self.n_channels)) / np.sqrt(2)
         self.FastFading = 20 * np.log10(np.abs(h))
+    
+    def act(self, actions=None, init=False):
+        #!实际上和act那里定义的不一样, 传入的actions还要再看看
+        master_action = [actions[i][:2*self.n_clusters] for i in range(self.n_clusters)]
+        slaves_action = [actions[i][2*self.n_clusters:] for i in range(self.n_clusters)] #! 看看对不对
+        if init:
+            for i in range(self.n_clusters):
+                self.Clusters[i].act(init=True)
+            for i in range(self.n_clusters):
+                for j in range(self.n_clusters):
+                    self.channel_select[i][j] = np.random.randint(self.n_channels)
+                    self.channel_power[i][j] = np.random.choice(self.power_list)
+        else:
+            cnt = 0
+            for i in range(self.n_clusters):
+                channel, power = slaves_action[i][:self.n_slaves], slaves_action[i][self.n_slaves:]
+                cnt += self.Clusters[i].act(channel, power)
+            for i in range(self.n_clusters):
+                channel, power = master_action[i][:self.n_slaves], master_action[i][self.n_slaves:]
+                for j in range(self.n_clusters):
+                    self.channel_power[i][j] = power[j] #注意 i -> j 和 j -> i 是不一样的, 双向通信
+                    if self.channel_select[i][j] != channel[j]:
+                        self.channel_select[i][j] = channel[j]
+                        if i != j:
+                            cnt += 1
+            return cnt
+
+    @property
+    def master_position(self):
+        return np.array([self.Clusters[i].position[0] for i in range(self.n_clusters)])
+
+    def observe(self):
+        _channel, _power, _position = [], [], []
+        for i in range(self.n_clusters):
+            channel, channel_power, position = self.Clusters[i].observe()
+            _channel.append(np.concatenate((channel, self.channel_select[i]), axis=0))
+            _power.append(np.concatenate((channel_power, self.channel_power[i]), axis=0))
+            _position.append(np.concatenate((position[1:], self.master_position), axis=0))
+        return (_channel, _power, _position)
+        
 
 class JammerChannel(JammerMoving):
     """
     干扰机的信道类
     """
     def __init__(
-        self, n_jammers=3, n_channels=6, jamming_mode='Markov', area_type="small_and_medium_size_cities", fc=800*1e6, hb=50, hm=20, **kwargs
+        self, n_jammers=3, n_channels=6, jamming_mode='Markov', area_type="small_and_medium_size_cities", fc=800*1e6, hb=50, hm=20, jammer_power=30, **kwargs
     ):
         super().__init__(**kwargs)
         self.n_jammers = n_jammers
@@ -114,11 +176,12 @@ class JammerChannel(JammerMoving):
         self.fc = fc
         self.hb = hb
         self.hm = hm
+        self.jammer_power = jammer_power #TODO 注意这里的jammer的功率都是固定的
         self.channels_jammed = np.zeros(shape=(n_channels,), dtype=np.int32) # 被干扰了就是1，没有被干扰就是0
         self.jamming_channel = np.zeros(shape=(n_jammers,)) # 每个干扰机的干扰信道
-        self._init_jamming_channel()
+        self._init_jamming()
 
-    def _init_jamming_channel(self):
+    def _init_jamming(self):
         if self.jamming_mode == 'Markov':
             self.transition_matrix = np.random.random(size=(self.n_jammers, self.n_channels))
             self.transition_matrix = self.transition_matrix / np.sum(self.transition_matrix, axis=1, keepdims=True)
