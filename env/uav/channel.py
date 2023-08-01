@@ -1,10 +1,8 @@
 import numpy as np
 from env.uav.moving import UAVMoving, JammerMoving
 
-def generate_complex_gaussian(size): # 生成复数高斯噪声
-    real_part = np.random.normal(0, 1, size)
-    imag_part = np.random.normal(0, 1, size)
-    return real_part + 1j*imag_part
+def generate_rayleigh_fading():
+    return float(20 * np.log10(np.random.rayleigh(1/1.414, size=(1))))
 
 def distance(p1, p2):
     return np.sqrt(np.sum(np.square(p1-p2)))
@@ -14,23 +12,29 @@ def calc_pathloss_params(fc, hb, hm, area_type="small_and_medium_size_cities"):
     使用Okumura-Hata模型 https://www.wiley.com/legacy/wileychi/molisch/supp2/appendices/c07_Appendices.pdf
     默认参数计算出的数据 : A:110.2, B:33.8, C:0
     """
-    if area_type == "small_and_medium_size_cities":
-        C = 0
-        ahm = (1.1*np.log10(fc)-0.7)*hm - (1.56*np.log10(fc)-0.8)
-    else:
-        if fc <= 200:
-            ahm = 8.29*(np.log10(1.54*hm))**2 - 1.1
-        else:
-            ahm = 3.2*(np.log10(11.75*hm))**2 - 4.97
-        if area_type == "metropolitan_areas":
-            C = 0
-        if area_type == "suburban_environments":
-            C = -2*(np.log10(fc/28))**2 - 5.4
-        if area_type == "rural_area":
-            C = -4.78*(np.log10(fc))**2 + 18.33*np.log10(fc) - 40.98
-    A = 69.55 + 26.16 * np.log10(fc) - 13.82 * np.log10(hb) - ahm
-    B = 44.9 - 6.55 * np.log10(hb)
+    # if area_type == "small_and_medium_size_cities":
+    #     C = 0
+    #     ahm = (1.1*np.log10(fc)-0.7)*hm - (1.56*np.log10(fc)-0.8)
+    # else:
+    #     if fc <= 200:
+    #         ahm = 8.29*(np.log10(1.54*hm))**2 - 1.1
+    #     else:
+    #         ahm = 3.2*(np.log10(11.75*hm))**2 - 4.97
+    #     if area_type == "metropolitan_areas":
+    #         C = 0
+    #     if area_type == "suburban_environments":
+    #         C = -2*(np.log10(fc/28))**2 - 5.4
+    #     if area_type == "rural_area":
+    #         C = -4.78*(np.log10(fc))**2 + 18.33*np.log10(fc) - 40.98
+    # A = 69.55 + 26.16 * np.log10(fc) - 13.82 * np.log10(hb) - ahm
+    # B = 44.9 - 6.55 * np.log10(hb)
+    A = 63.8
+    B = 20.9
+    C = 0
     return A, B, C
+
+def pathloss_function(A, B, C, d): #! 自己定的, 有待改进
+    return A + B * np.log10(d/10000 + 1e-3) + C
 
 class ClusterChannel(UAVMoving):
     """
@@ -48,7 +52,6 @@ class ClusterChannel(UAVMoving):
         self.hb = hb
         self.hm = hm
         self.pathloss = np.zeros(shape=(n_slaves,))
-        self.FastFading = np.zeros(shape=(n_slaves, n_channels))
         # action
         self.power_list = power_list
         self.channel_power = np.zeros(shape=(n_slaves,), dtype=np.int32)
@@ -56,19 +59,20 @@ class ClusterChannel(UAVMoving):
         if n_channels < n_slaves:
             raise ValueError("The number of channels should be greater than the number of slaves.")
         self.calc_pathloss()
-        self.calc_fast_fading()
         self.A, self.B, self.C = calc_pathloss_params(self.fc, self.hb, self.hm, self.area_type)
     
     def cluster_pathloss_interference(self, k):
         """
         计算簇群内部的干扰, 第k个slave受到的干扰
+        !对于同一个cluster内的slave, 我觉得可以考虑在同一个信道里面通信, 同一个信道里面最多可以通信x个, 多了就会干扰, 当然在这里我们还是说一个信道就干扰
         """
         ans = 0
         for i in range(self.n_slaves):
             if k == i or self.channel_select[k] != self.channel_select[i]:
                 continue
             d = distance(self.position[k+1], self.position[i+1]) + distance(self.position[i+1], self.position[0]) + 1e-3
-            ans += max(self.A + self.B * np.log10(d) + self.C, 0)
+            dB = max(pathloss_function(self.A, self.B, self.C, d) + generate_rayleigh_fading(), 0) # 加上瑞利衰落
+            ans += self.channel_power[i] * (10 ** dB/10)
         return ans
     
     def calc_pathloss(self):
@@ -78,11 +82,7 @@ class ClusterChannel(UAVMoving):
         """
         for i in range(len(self.n_slaves)):
             d = distance(self.position[i+1], self.position[0]) + 1e-3
-            self.pathloss[i] = max(self.A + self.B * np.log10(d) + self.C, 0) # 防止出现负数
-    
-    def calc_fast_fading(self):
-        h = generate_complex_gaussian(size=(self.n_slaves, self.n_channels)) / np.sqrt(2) # 每一个slave对于所有的信道都先算出来
-        self.FastFading = 20 * np.log10(np.abs(h))
+            self.pathloss[i] = max(pathloss_function(self.A, self.B, self.C, d), 0) # 防止出现负数
     
     def act(self, channel=None, channel_power=None, init=False):
         if not init:
@@ -119,22 +119,30 @@ class Channel(object):
         self.channel_select = np.zeros(shape=(n_clusters, n_clusters), dtype=np.int32)
         self.channel_power = np.zeros(shape=(n_clusters,), dtype=np.int32)
         self.pathloss = np.zeros(shape=(n_clusters, n_clusters))
-        self.FastFading = np.zeros(shape=(n_clusters, n_clusters, n_channels))
         self.Clusters = [ClusterChannel(n_channels, n_slaves, area_type, fc, hb, hm) for _ in range(n_clusters)]
         
         self.calc_pathloss()
         self.calc_fast_fading()
         self.A, self.B, self.C = calc_pathloss_params(self.fc, self.hb, self.hm, self.area_type)
 
+    def cluster_pathloss_interference_slaves(self, j, k):
+        """
+        计算簇群之间的干扰, 第k个cluster的第j个slave受到各个master通信时的干扰
+        """
+        ans = 0
+        for i in range(self.n_clusters):
+            if k == i or self.channel_select[i][k] != self.Clusters[k].channel_select[j]:
+                continue
+            d = distance(self.Clusters[i].position[0], self.Clusters[k].position[0]) + distance(self.Clusters[k].position[0], self.Clusters[k].position[j+1]) + 1e-3
+            ans += max(pathloss_function(self.A, self.B, self.C, d) + generate_rayleigh_fading(), 0)
+        return ans
+
+
     def calc_pathloss(self):
         for i in range(self.n_clusters):
             for j in range(self.n_clusters):
                 d = distance(self.Clusters[i].position[0], self.Clusters[j].position[0]) + 1e-3
-                self.pathloss[i][j] = max(self.A + self.B * np.log10(d) + self.C, 0)
-
-    def calc_fast_fading(self):
-        h = generate_complex_gaussian(size=(self.n_clusters, self.n_clusters, self.n_channels)) / np.sqrt(2)
-        self.FastFading = 20 * np.log10(np.abs(h))
+                self.pathloss[i][j] = max(pathloss_function(self.A, self.B, self.C, d), 0)
     
     def act(self, actions=None, init=False):
         #!实际上和act那里定义的不一样, 传入的actions还要再看看
@@ -195,6 +203,7 @@ class JammerChannel(JammerMoving):
         self.channels_jammed = np.zeros(shape=(n_channels,), dtype=np.int32) # 被干扰了就是1，没有被干扰就是0
         self.jamming_channel = np.zeros(shape=(n_jammers,)) # 每个干扰机的干扰信道
         self._init_jamming()
+        self.A, self.B, self.C = calc_pathloss_params(self.fc, self.hb, self.hm, self.area_type)
 
     def _init_jamming(self):
         if self.jamming_mode == 'Markov':
@@ -228,3 +237,12 @@ class JammerChannel(JammerMoving):
             self.channels_jammed[self.jamming_channel[i]] -= 1
             self.jamming_channel[i] = next_channel(i)
             self.channels_jammed[self.jamming_channel[i]] += 1
+
+    def jamming_pathloss_slaves(self, pos_slaves, pos_master, channel):
+        ans = 0
+        for i in range(self.n_jammers):
+            if self.jamming_channel[i] != channel:
+                continue
+            d = distance(pos_slaves, pos_master) + distance(pos_master, self.position[i]) + 1e-3
+            ans += max(pathloss_function(self.A, self.B, self.C, d) + generate_rayleigh_fading(), 0)
+        return ans

@@ -51,6 +51,7 @@ class UAVMoving(object):
         self.velocity[0] = 2 * self.master_velocity * np.random.random()
     
     def _step(self, RangeIter, velocity):
+        #! 搞忘了uav不能离开簇头太远了
         for i in RangeIter:
             def rand():
                 return np.random.random() - 0.5

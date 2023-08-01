@@ -57,9 +57,10 @@ class systemEnv(gym.Env):
         for i in range(self.n_clusters):
             for j in range(self.n_slaves):
                 jam, gain = 0, 0
-                # 同一个cluster内的
-                for k in range(self.n_slaves): #! 对于同一个cluster内的slave, 我觉得可以考虑在同一个信道里面通信, 同一个信道里面最多可以通信x个, 多了就会干扰, 当然在这里我们还是说一个信道就干扰
-                    
+                jam += self.channel.Clusters[i].cluster_pathloss_interference(j)
+                jam += self.channel.cluster_pathloss_interference_slaves(j, i)
+                jam += self.jammer.jamming_pathloss_slaves(self.channel.Clusters[i].position[j+1], self.channel.Clusters[i].position[0], self.channel.Clusters[i].channel_select[j])
+                gain = 
 
 
     def observe(self):
