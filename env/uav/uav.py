@@ -51,15 +51,27 @@ class systemEnv(gym.Env):
 
     def step(self, action):
         pass
+    
+    def calc_gain(self):
+        pass
+
+    def observe(self):
+        channel, power, position = self.channel.observe()
+        gain = self.calc_gain()
+        return (channel, power, position, gain)
 
     def reset(self):
         # jammer
         self.jammer._init_jamming()
         # master和slaves通信信道
-        self.jammer
+        self.channel.act(init=True)
+        return self.observe(), None
 
     def render(self):
         pass
 
     def seed(self):
+        pass
+
+    def reward(self):
         pass
