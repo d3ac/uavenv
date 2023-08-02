@@ -48,25 +48,28 @@ class systemEnv(gym.Env):
         # 定义
         self.channel = Channel(n_clusters, n_channels, n_slaves, area_type, fc, hb, hm, power_list, **kwargs)
         self.jammer = JammerChannel(n_jammers, n_channels, jamming_mode, area_type, fc, hb, hm, jammer_power, **kwargs)
-
-    def step(self, action):
-        pass
     
-    def calc_gain(self):
-        # 计算每个slave的增益
+    def calc_SNR(self):
+        SNR = [[] for _ in self.n_clusters]
         for i in range(self.n_clusters):
             for j in range(self.n_slaves):
                 jam, gain = 0, 0
-                jam += self.channel.Clusters[i].cluster_pathloss_interference(j)
-                jam += self.channel.cluster_pathloss_interference_slaves(j, i)
-                jam += self.jammer.jamming_pathloss_slaves(self.channel.Clusters[i].position[j+1], self.channel.Clusters[i].position[0], self.channel.Clusters[i].channel_select[j])
-                gain = 
+                jam += self.channel.Clusters[i].cluster_pathloss_interference(j)  # cluster内部通信的干扰
+                jam += self.channel.cluster_pathloss_interference_slaves(j, i)    # cluster之间master to master通信的干扰
+                #!还可以加上 cluster之间master to slave通信的干扰
+                jam += self.jammer.jamming_pathloss_slaves(self.channel.Clusters[i].position[j+1], self.channel.Clusters[i].position[0], self.channel.Clusters[i].channel_select[j]) # jammer对cluster内部通信的干扰
+                gain = self.channel.Clusters[i].channel_power[j] * (10 ** (self.channel.Clusters[i].pathloss[j] / 10))
+                SNR[i].append(10 * np.log10(gain / jam))
+            jam = self.channel.calc_jam(i)
+            gain = self.channel.calc_gain(i)
+            SNR[i].extend(10 * np.log10(gain / jam))
+        return SNR
 
 
     def observe(self):
         channel, power, position = self.channel.observe()
-        gain = self.calc_gain() #! 这个实际上应该是 power和速率的某个函数
-        return (channel, power, position, gain)
+        SNR = self.calc_SNR() #! 这个实际上应该是 power和速率的某个函数
+        return (channel, power, position, SNR)
 
     def reset(self):
         # jammer
@@ -82,4 +85,7 @@ class systemEnv(gym.Env):
         pass
 
     def reward(self):
+        pass
+
+    def step(self, action):
         pass

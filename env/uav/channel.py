@@ -2,7 +2,7 @@ import numpy as np
 from env.uav.moving import UAVMoving, JammerMoving
 
 def generate_rayleigh_fading():
-    return float(20 * np.log10(np.random.rayleigh(1/1.414, size=(1))))
+    return - float(20 * np.log10(np.random.rayleigh(1/1.414, size=(1)))) # 后面都是加, 所以这里要加负号
 
 def distance(p1, p2):
     return np.sqrt(np.sum(np.square(p1-p2)))
@@ -58,13 +58,14 @@ class ClusterChannel(UAVMoving):
         self.channel_select = np.zeros(shape=(n_slaves,), dtype=np.int32)
         if n_channels < n_slaves:
             raise ValueError("The number of channels should be greater than the number of slaves.")
-        self.calc_pathloss()
         self.A, self.B, self.C = calc_pathloss_params(self.fc, self.hb, self.hm, self.area_type)
+        self.calc_pathloss()
     
     def cluster_pathloss_interference(self, k):
         """
         计算簇群内部的干扰, 第k个slave受到的干扰
         !对于同一个cluster内的slave, 我觉得可以考虑在同一个信道里面通信, 同一个信道里面最多可以通信x个, 多了就会干扰, 当然在这里我们还是说一个信道就干扰
+        同信道干扰也可以考虑乘上一个系数, 让他没有jammer干扰那么大
         """
         ans = 0
         for i in range(self.n_slaves):
@@ -72,7 +73,7 @@ class ClusterChannel(UAVMoving):
                 continue
             d = distance(self.position[k+1], self.position[i+1]) + distance(self.position[i+1], self.position[0]) + 1e-3
             dB = max(pathloss_function(self.A, self.B, self.C, d) + generate_rayleigh_fading(), 0) # 加上瑞利衰落
-            ans += self.channel_power[i] * (10 ** dB/10)
+            ans += self.channel_power[i] * (10 ** (dB/10))
         return ans
     
     def calc_pathloss(self):
@@ -80,9 +81,9 @@ class ClusterChannel(UAVMoving):
         计算master和slaves的pathloss
         ! 注意实际上使用Okumura-Hata模型有一点不合适
         """
-        for i in range(len(self.n_slaves)):
+        for i in range(self.n_slaves):
             d = distance(self.position[i+1], self.position[0]) + 1e-3
-            self.pathloss[i] = max(pathloss_function(self.A, self.B, self.C, d), 0) # 防止出现负数
+            self.pathloss[i] = max(pathloss_function(self.A, self.B, self.C, d) + generate_rayleigh_fading(), 0) # 防止出现负数
     
     def act(self, channel=None, channel_power=None, init=False):
         if not init:
@@ -99,6 +100,64 @@ class ClusterChannel(UAVMoving):
     
     def observe(self):
         return (self.channel_select, self.channel_power, self.position)
+    
+class JammerChannel(JammerMoving):
+    """
+    干扰机的信道类
+    """
+    def __init__(
+        self, n_jammers=3, n_channels=6, jamming_mode='Markov', area_type="small_and_medium_size_cities", fc=800*1e6, hb=50, hm=20, jammer_power=30, **kwargs
+    ):
+        super().__init__(**kwargs)
+        self.n_jammers = n_jammers
+        self.n_channels = n_channels
+        self.area_type = area_type
+        self.jamming_mode = jamming_mode
+        self.fc = fc
+        self.hb = hb
+        self.hm = hm
+        self.jammer_power = jammer_power #TODO 注意这里的jammer的功率都是固定的
+        self.jamming_channel = np.zeros(shape=(n_jammers,)) # 每个干扰机的干扰信道
+        self._init_jamming()
+        self.A, self.B, self.C = calc_pathloss_params(self.fc, self.hb, self.hm, self.area_type)
+
+    def _init_jamming(self):
+        if self.jamming_mode == 'Markov':
+            self.transition_matrix = np.random.random(size=(self.n_jammers, self.n_channels))
+            self.transition_matrix = self.transition_matrix / np.sum(self.transition_matrix, axis=1, keepdims=True)
+            for i in range(self.n_jammers):
+                self.jamming_channel[i] = np.random.choice(self.n_channels, p=self.transition_matrix[i])
+        elif self.jamming_mode == 'Sweeping':
+            for i in range(self.n_jammers):
+                self.jamming_channel[i] = i
+        elif self.jamming_mode == 'Random':
+            for i in range(self.n_jammers):
+                self.jamming_channel[i] = np.random.randint(self.n_channels)
+        else:
+            raise NotImplementedError("The jamming mode is not implemented.")
+
+    def step(self):
+        super().step() # 更新位置
+        def next_channel(i):
+            if self.jamming_mode == 'Markov':
+                return np.random.choice(self.n_channels, p=self.transition_matrix[i])
+            elif self.jamming_mode == 'Sweeping':
+                return (self.jamming_channel[i] + 1) % self.n_channels
+            elif self.jamming_mode == 'Random':
+                return np.random.randint(self.n_channels)
+        
+        for i in range(self.n_jammers):
+            self.jamming_channel[i] = next_channel(i)
+
+    def jamming_pathloss_slaves(self, pos_slaves, pos_master, channel):
+        ans = 0
+        for i in range(self.n_jammers):
+            if self.jamming_channel[i] != channel:
+                continue
+            d = distance(pos_slaves, pos_master) + distance(pos_master, self.position[i]) + 1e-3
+            dB = max(pathloss_function(self.A, self.B, self.C, d) + generate_rayleigh_fading(), 0)
+            ans += self.jammer_power * (10 ** (dB/10))
+        return ans
 
 class Channel(object):
     """
@@ -117,13 +176,12 @@ class Channel(object):
         self.power_list = power_list
 
         self.channel_select = np.zeros(shape=(n_clusters, n_clusters), dtype=np.int32)
-        self.channel_power = np.zeros(shape=(n_clusters,), dtype=np.int32)
+        self.channel_power = np.zeros(shape=(n_clusters, n_clusters), dtype=np.int32)
         self.pathloss = np.zeros(shape=(n_clusters, n_clusters))
         self.Clusters = [ClusterChannel(n_channels, n_slaves, area_type, fc, hb, hm) for _ in range(n_clusters)]
         
-        self.calc_pathloss()
-        self.calc_fast_fading()
         self.A, self.B, self.C = calc_pathloss_params(self.fc, self.hb, self.hm, self.area_type)
+        self.calc_pathloss()
 
     def cluster_pathloss_interference_slaves(self, j, k):
         """
@@ -134,7 +192,8 @@ class Channel(object):
             if k == i or self.channel_select[i][k] != self.Clusters[k].channel_select[j]:
                 continue
             d = distance(self.Clusters[i].position[0], self.Clusters[k].position[0]) + distance(self.Clusters[k].position[0], self.Clusters[k].position[j+1]) + 1e-3
-            ans += max(pathloss_function(self.A, self.B, self.C, d) + generate_rayleigh_fading(), 0)
+            dB = max(pathloss_function(self.A, self.B, self.C, d) + generate_rayleigh_fading(), 0)
+            ans += self.channel_power[i][k] * (10 ** (dB/10))
         return ans
 
 
@@ -163,7 +222,7 @@ class Channel(object):
             for i in range(self.n_clusters):
                 channel, power = master_action[i][:self.n_slaves], master_action[i][self.n_slaves:]
                 for j in range(self.n_clusters):
-                    self.channel_power[i][j] = power[j] #注意 i -> j 和 j -> i 是不一样的, 双向通信
+                    self.channel_power[i][j] = power[j] # 注意 i -> j 和 j -> i 是不一样的, 双向通信
                     if self.channel_select[i][j] != channel[j]:
                         self.channel_select[i][j] = channel[j]
                         if i != j:
@@ -175,6 +234,11 @@ class Channel(object):
         return np.array([self.Clusters[i].position[0] for i in range(self.n_clusters)])
 
     def observe(self):
+        """
+        _channel : (n_clusters, n_slaves+n_clusters)
+        _power : (n_clusters, n_power+n_clusters)
+        _position : (n_clusters, n_slaves+n_clusters, 3)
+        """
         _channel, _power, _position = [], [], []
         for i in range(self.n_clusters):
             channel, channel_power, position = self.Clusters[i].observe()
@@ -182,67 +246,42 @@ class Channel(object):
             _power.append(np.concatenate((channel_power, self.channel_power[i]), axis=0))
             _position.append(np.concatenate((position[1:], self.master_position), axis=0))
         return (_channel, _power, _position)
-        
-
-class JammerChannel(JammerMoving):
-    """
-    干扰机的信道类
-    """
-    def __init__(
-        self, n_jammers=3, n_channels=6, jamming_mode='Markov', area_type="small_and_medium_size_cities", fc=800*1e6, hb=50, hm=20, jammer_power=30, **kwargs
-    ):
-        super().__init__(**kwargs)
-        self.n_jammers = n_jammers
-        self.n_channels = n_channels
-        self.area_type = area_type
-        self.jamming_mode = jamming_mode
-        self.fc = fc
-        self.hb = hb
-        self.hm = hm
-        self.jammer_power = jammer_power #TODO 注意这里的jammer的功率都是固定的
-        self.channels_jammed = np.zeros(shape=(n_channels,), dtype=np.int32) # 被干扰了就是1，没有被干扰就是0
-        self.jamming_channel = np.zeros(shape=(n_jammers,)) # 每个干扰机的干扰信道
-        self._init_jamming()
-        self.A, self.B, self.C = calc_pathloss_params(self.fc, self.hb, self.hm, self.area_type)
-
-    def _init_jamming(self):
-        if self.jamming_mode == 'Markov':
-            self.transition_matrix = np.random.random(size=(self.n_jammers, self.n_channels))
-            self.transition_matrix = self.transition_matrix / np.sum(self.transition_matrix, axis=1, keepdims=True)
-            for i in range(self.n_jammers):
-                self.jamming_channel[i] = np.random.choice(self.n_channels, p=self.transition_matrix[i])
-                self.channels_jammed[self.jamming_channel[i]] += 1
-        elif self.jamming_mode == 'Sweeping':
-            for i in range(self.n_jammers):
-                self.jamming_channel[i] = i
-                self.channels_jammed[i] += 1
-        elif self.jamming_mode == 'Random':
-            for i in range(self.n_jammers):
-                self.jamming_channel[i] = np.random.randint(self.n_channels)
-                self.channels_jammed[self.jamming_channel[i]] += 1
-        else:
-            raise NotImplementedError("The jamming mode is not implemented.")
-
-    def step(self):
-        super().step() # 更新位置
-        def next_channel(i):
-            if self.jamming_mode == 'Markov':
-                return np.random.choice(self.n_channels, p=self.transition_matrix[i])
-            elif self.jamming_mode == 'Sweeping':
-                return (self.jamming_channel[i] + 1) % self.n_channels
-            elif self.jamming_mode == 'Random':
-                return np.random.randint(self.n_channels)
-        
-        for i in range(self.n_jammers):
-            self.channels_jammed[self.jamming_channel[i]] -= 1
-            self.jamming_channel[i] = next_channel(i)
-            self.channels_jammed[self.jamming_channel[i]] += 1
-
-    def jamming_pathloss_slaves(self, pos_slaves, pos_master, channel):
-        ans = 0
-        for i in range(self.n_jammers):
-            if self.jamming_channel[i] != channel:
+    
+    def calc_gain(self, k):
+        """
+        计算第k个master与其他master通信的增益
+        """
+        ans = []
+        for i in range(self.n_clusters):
+            if i == k:
                 continue
-            d = distance(pos_slaves, pos_master) + distance(pos_master, self.position[i]) + 1e-3
-            ans += max(pathloss_function(self.A, self.B, self.C, d) + generate_rayleigh_fading(), 0)
-        return ans
+            d = distance(self.Clusters[i].position[0], self.Clusters[k].position[0]) + 1e-3
+            dB = max(pathloss_function(self.A, self.B, self.C, d) + generate_rayleigh_fading(), 0)
+            ans.append(self.channel_power[i][k] * (10 ** (dB/10)))
+
+    def calc_jam(self, k, jammer: JammerChannel):
+        """
+        计算第k个master与其他master通信的干扰
+        """
+        def generate_dB():
+            fading = max(generate_rayleigh_fading(), 1e-3) #! 会不会导致干扰太小了?
+            return np.mean(self.power_list) * (10 ** (fading/10))
+
+        jam = [generate_rayleigh_fading() for _ in range(self.n_clusters - 1)] #! 初始值为什么好呢?
+        for i in range(self.n_clusters):
+            if i == k:
+                continue
+            # master之间的干扰
+            for j in range(self.n_clusters):
+                if j == k or self.channel_select[k][i] != self.channel_select[j][i]:
+                    continue
+                d = distance(self.Clusters[i].position[0], self.Clusters[j].position[0]) + 1e-3
+                dB = max(pathloss_function(self.A, self.B, self.C, d), 0)
+                jam[i - (i>=k)] += self.channel_power[j][i] * (10 ** (dB/10)) # 位置要对, 少了一个
+            # jammer的干扰
+            for j in range(jammer.n_jammers):
+                if jammer.jamming_channel[j] != self.channel_select[k][i]:
+                    continue
+                d = distance(self.Clusters[i].position[0], jammer.position[j]) + 1e-3
+                dB = max(pathloss_function(self.A, self.B, self.C, d), 0)
+                jam[i - (i>=k)] += jammer.jammer_power * (10 ** (dB/10))
