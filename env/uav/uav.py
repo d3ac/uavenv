@@ -92,5 +92,5 @@ class systemEnv(gym.Env):
     def reward(self):
         pass
 
-    def step(self, action):
-        pass
+    def step(self, actions):
+        self.channel.Clusters.

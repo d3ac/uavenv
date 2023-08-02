@@ -50,7 +50,7 @@ class UAVMoving(object):
             self.velocity[i] = 2 * self.slave_velocity * np.random.random()
         self.velocity[0] = 2 * self.master_velocity * np.random.random()
     
-    def _step(self, RangeIter, velocity):
+    def _position_step(self, RangeIter, velocity):
         #! 搞忘了uav不能离开簇头太远了
         for i in RangeIter:
             def rand():
@@ -63,9 +63,9 @@ class UAVMoving(object):
             z = self.position[i][2] + self.velocity[i] * np.cos(self.elevation[i]) * self.dt
             self.position[i] = (np.clip(x, 0, self.xlim), np.clip(y, 0, self.ylim), np.clip(z, self.zlim_min, self.zlim_max))
 
-    def step(self):
-        self._step((0,), self.master_velocity)
-        self._step(range(1, self.n_slaves+1), self.slave_velocity)
+    def position_step(self):
+        self._position_step((0,), self.master_velocity)
+        self._position_step(range(1, self.n_slaves+1), self.slave_velocity)
 
 class JammerMoving(object):
     def __init__(
@@ -102,7 +102,7 @@ class JammerMoving(object):
             self.elevation[i] = np.pi * np.random.random()
             self.velocity[i] = 2 * self.jammer_velocity * np.random.random()
     
-    def step(self):
+    def position_step(self):
         for i in range(self.n_jammers):
             def rand():
                 return np.random.random() - 0.5
