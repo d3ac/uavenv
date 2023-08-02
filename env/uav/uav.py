@@ -4,13 +4,14 @@ import numpy as np
 import random
 from env.uav.channel import Channel, JammerChannel, ClusterChannel
 
+
 class systemEnv(gym.Env):
     """
     """
     def __init__(
         self, n_clusters=3, n_channels=6, n_slaves=3, n_jammers=3, area_type="small_and_medium_size_cities",
         jamming_mode='Markov', fc=800*1e6, hb=50, hm=20, power_list=[36, 33, 30, 27], jammer_power = 30,
-        xlim=1000, ylim=1000, zlim_max=200, zlim_min=50, max_radius=50, master_velocity=10, slave_velocity=10, moving_factor=0.1, dt=0.1, **kwargs
+        xlim=1000, ylim=1000, zlim_max=200, zlim_min=50, max_radius=50, master_velocity=10, slave_velocity=10, moving_factor=0.1, dt=0.1, seed=None, **kwargs
     ):
         # 定义channel参数
         self.n_clusters = n_clusters
@@ -48,21 +49,23 @@ class systemEnv(gym.Env):
         # 定义
         self.channel = Channel(n_clusters, n_channels, n_slaves, area_type, fc, hb, hm, power_list, **kwargs)
         self.jammer = JammerChannel(n_jammers, n_channels, jamming_mode, area_type, fc, hb, hm, jammer_power, **kwargs)
+        # 种子
+        self.seed(seed)
     
     def calc_SNR(self):
-        SNR = [[] for _ in self.n_clusters]
+        SNR = [[] for _ in range(self.n_clusters)]
         for i in range(self.n_clusters):
             for j in range(self.n_slaves):
-                jam, gain = 0, 0
+                jam, gain = 1e-3, 0
                 jam += self.channel.Clusters[i].cluster_pathloss_interference(j)  # cluster内部通信的干扰
                 jam += self.channel.cluster_pathloss_interference_slaves(j, i)    # cluster之间master to master通信的干扰
                 #!还可以加上 cluster之间master to slave通信的干扰
                 jam += self.jammer.jamming_pathloss_slaves(self.channel.Clusters[i].position[j+1], self.channel.Clusters[i].position[0], self.channel.Clusters[i].channel_select[j]) # jammer对cluster内部通信的干扰
                 gain = self.channel.Clusters[i].channel_power[j] * (10 ** (self.channel.Clusters[i].pathloss[j] / 10))
                 SNR[i].append(10 * np.log10(gain / jam))
-            jam = self.channel.calc_jam(i)
+            jam = self.channel.calc_jam(i, self.jammer)
             gain = self.channel.calc_gain(i)
-            SNR[i].extend(10 * np.log10(gain / jam))
+            SNR[i].extend(10 * list(np.log10(np.array(gain) / np.array(jam))))
         return SNR
 
 
@@ -81,8 +84,10 @@ class systemEnv(gym.Env):
     def render(self):
         pass
 
-    def seed(self):
-        pass
+    def seed(self, seed=None):
+        if seed is not None:
+            np.random.seed(seed)
+            random.seed(seed)
 
     def reward(self):
         pass

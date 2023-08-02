@@ -90,7 +90,7 @@ class JammerMoving(object):
         self._init_moving_params()
     
     def _init_position(self, init_potision=None):
-        if init_potision is not None:
+        if init_potision is None:
             for i in range(self.n_jammers):
                 self.position[i] = (random.uniform(0,self.xlim),random.uniform(0,self.ylim),random.uniform(self.zlim_min,self.zlim_max))
         else:

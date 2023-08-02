@@ -205,8 +205,6 @@ class Channel(object):
     
     def act(self, actions=None, init=False):
         #!实际上和act那里定义的不一样, 传入的actions还要再看看
-        master_action = [actions[i][:2*self.n_clusters] for i in range(self.n_clusters)]
-        slaves_action = [actions[i][2*self.n_clusters:] for i in range(self.n_clusters)] #! 看看对不对
         if init:
             for i in range(self.n_clusters):
                 self.Clusters[i].act(init=True)
@@ -215,6 +213,8 @@ class Channel(object):
                     self.channel_select[i][j] = np.random.randint(self.n_channels)
                     self.channel_power[i][j] = np.random.choice(self.power_list)
         else:
+            master_action = [actions[i][:2*self.n_clusters] for i in range(self.n_clusters)]
+            slaves_action = [actions[i][2*self.n_clusters:] for i in range(self.n_clusters)] #! 看看对不对
             cnt = 0
             for i in range(self.n_clusters):
                 channel, power = slaves_action[i][:self.n_slaves], slaves_action[i][self.n_slaves:]
@@ -251,13 +251,14 @@ class Channel(object):
         """
         计算第k个master与其他master通信的增益
         """
-        ans = []
+        gain = []
         for i in range(self.n_clusters):
             if i == k:
                 continue
             d = distance(self.Clusters[i].position[0], self.Clusters[k].position[0]) + 1e-3
             dB = max(pathloss_function(self.A, self.B, self.C, d) + generate_rayleigh_fading(), 0)
-            ans.append(self.channel_power[i][k] * (10 ** (dB/10)))
+            gain.append(self.channel_power[i][k] * (10 ** (dB/10)))
+        return gain
 
     def calc_jam(self, k, jammer: JammerChannel):
         """
@@ -267,7 +268,7 @@ class Channel(object):
             fading = max(generate_rayleigh_fading(), 1e-3) #! 会不会导致干扰太小了?
             return np.mean(self.power_list) * (10 ** (fading/10))
 
-        jam = [generate_rayleigh_fading() for _ in range(self.n_clusters - 1)] #! 初始值为什么好呢?
+        jam = [generate_dB() for _ in range(self.n_clusters - 1)] #! 初始值为什么好呢?
         for i in range(self.n_clusters):
             if i == k:
                 continue
@@ -285,3 +286,4 @@ class Channel(object):
                 d = distance(self.Clusters[i].position[0], jammer.position[j]) + 1e-3
                 dB = max(pathloss_function(self.A, self.B, self.C, d), 0)
                 jam[i - (i>=k)] += jammer.jammer_power * (10 ** (dB/10))
+        return jam
