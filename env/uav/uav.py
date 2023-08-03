@@ -71,7 +71,6 @@ class systemEnv(gym.Env):
             SNR[i].extend(10 * list(np.log10(np.array(gain) / np.array(jam))))
         return SNR
 
-
     def observe(self):
         channel, power, position = self.channel.observe()
         SNR = self.calc_SNR() #! 这个实际上应该是 power和速率的某个函数
@@ -97,7 +96,7 @@ class systemEnv(gym.Env):
             np.random.seed(seed)
             random.seed(seed)
 
-    def reward(self, SNR, frequency_hopping_cnt): #!还有改进的空间
+    def reward(self, SNR, frequency_hopping_cnt): #!还有改进的空间, 还有一件事就是这个reward是不是负数?为了梯度下降
         return np.sum(SNR, axis=1) - frequency_hopping_cnt
 
     @property
