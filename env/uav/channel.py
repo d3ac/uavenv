@@ -41,7 +41,7 @@ class ClusterChannel(UAVMoving):
     一个簇群的信道类
     """
     def __init__(
-        self, n_channels=6, n_slaves=3, area_type="small_and_medium_size_cities", fc=800*1e6, hb=50, hm=20, power_list=[36, 33, 30, 27],**kwargs
+        self, n_channels=6, n_slaves=3, area_type="small_and_medium_size_cities", fc=800*1e6, hb=50, hm=20, power_list=[27, 30, 33, 36],**kwargs
     ):
         super().__init__(**kwargs)
         # 通信参数
@@ -85,9 +85,10 @@ class ClusterChannel(UAVMoving):
             d = distance(self.position[i+1], self.position[0]) + 1e-3
             self.pathloss[i] = max(pathloss_function(self.A, self.B, self.C, d) + generate_rayleigh_fading(), 0) # 防止出现负数
     
-    def act(self, channel=None, channel_power=None, init=False):
+    def act(self, channel=None, channel_power=None, init=False): #! power是不是可以换成一个连续的?
         if not init:
-            self.channel_power = channel_power
+            for i, j in enumerate(channel_power):
+                self.channel_power[i] = self.power_list[j]
             cnt = 0
             for i in range(self.n_slaves):
                 if self.channel_select[i] != channel[i]:
@@ -100,6 +101,7 @@ class ClusterChannel(UAVMoving):
     
     def observe(self):
         return (self.channel_select, self.channel_power, self.position)
+    
     
 class JammerChannel(JammerMoving):
     """
@@ -158,6 +160,7 @@ class JammerChannel(JammerMoving):
             dB = max(pathloss_function(self.A, self.B, self.C, d) + generate_rayleigh_fading(), 0)
             ans += self.jammer_power * (10 ** (dB/10))
         return ans
+    
 
 class Channel(object):
     """
@@ -177,11 +180,9 @@ class Channel(object):
 
         self.channel_select = np.zeros(shape=(n_clusters, n_clusters), dtype=np.int32)
         self.channel_power = np.zeros(shape=(n_clusters, n_clusters), dtype=np.int32)
-        self.pathloss = np.zeros(shape=(n_clusters, n_clusters))
         self.Clusters = [ClusterChannel(n_channels, n_slaves, area_type, fc, hb, hm) for _ in range(n_clusters)]
         
         self.A, self.B, self.C = calc_pathloss_params(self.fc, self.hb, self.hm, self.area_type)
-        self.calc_pathloss()
 
     def cluster_pathloss_interference_slaves(self, j, k):
         """
@@ -195,15 +196,12 @@ class Channel(object):
             dB = max(pathloss_function(self.A, self.B, self.C, d) + generate_rayleigh_fading(), 0)
             ans += self.channel_power[i][k] * (10 ** (dB/10))
         return ans
-
-
-    def calc_pathloss(self):
-        for i in range(self.n_clusters):
-            for j in range(self.n_clusters):
-                d = distance(self.Clusters[i].position[0], self.Clusters[j].position[0]) + 1e-3
-                self.pathloss[i][j] = max(pathloss_function(self.A, self.B, self.C, d), 0)
     
     def act(self, actions=None, init=False):
+        """
+        actions: (n_clusters, ...) -> action (后面的就是action部分)
+        action: master_action (n_clusters, 2*n_clusters) slaves_action (n_clusters, 2*n_slaves)
+        """
         #!实际上和act那里定义的不一样, 传入的actions还要再看看
         if init:
             for i in range(self.n_clusters):
@@ -215,18 +213,17 @@ class Channel(object):
         else:
             master_action = [actions[i][:2*self.n_clusters] for i in range(self.n_clusters)]
             slaves_action = [actions[i][2*self.n_clusters:] for i in range(self.n_clusters)] #! 看看对不对
-            cnt = 0
-            for i in range(self.n_clusters):
+            cnt = np.zeros(shape=(self.n_clusters,), dtype=np.int32)
+            for i in range(self.n_clusters): # 这里是一个master的slaves
                 channel, power = slaves_action[i][:self.n_slaves], slaves_action[i][self.n_slaves:]
-                cnt += self.Clusters[i].act(channel, power)
-            for i in range(self.n_clusters):
-                channel, power = master_action[i][:self.n_slaves], master_action[i][self.n_slaves:]
+                cnt[i] += self.Clusters[i].act(channel, power)
+            for i in range(self.n_clusters): # 这里是master之间的通信
+                channel, power = master_action[i][:self.n_clusters], master_action[i][self.n_clusters:]
                 for j in range(self.n_clusters):
-                    self.channel_power[i][j] = power[j] # 注意 i -> j 和 j -> i 是不一样的, 双向通信
+                    self.channel_power[i][j] = self.power_list[power[j]] # 注意 i -> j 和 j -> i 是不一样的, 双向通信
                     if self.channel_select[i][j] != channel[j]:
                         self.channel_select[i][j] = channel[j]
-                        if i != j:
-                            cnt += 1
+                        cnt[i] += (i!=j)
             return cnt
 
     @property
@@ -287,3 +284,7 @@ class Channel(object):
                 dB = max(pathloss_function(self.A, self.B, self.C, d), 0)
                 jam[i - (i>=k)] += jammer.jammer_power * (10 ** (dB/10))
         return jam
+    
+    def position_step(self):
+        for i in range(self.n_clusters):
+            self.Clusters[i].position_step()
