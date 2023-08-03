@@ -86,7 +86,10 @@ class systemEnv(gym.Env):
         self.jammer._init_jamming()
         # master和slaves通信信道
         self.channel.act(init=True)
-        return self.observe(), None
+        channel, power, position, SNR = self.observe()
+        channel, power, position, SNR = self.normalize_observation(channel, power, position, SNR)
+        observation = self.merge_observe(channel, power, position, SNR)
+        return observation, None
 
     def render(self):
         pass
@@ -107,13 +110,34 @@ class systemEnv(gym.Env):
     @property
     def trucated(self):
         return self.done
+    
+    def normalize_observation(self, channel, power, position, SNR):
+        #! 这个地方的mean和std都是写死了的, 如果是multitask就需要改改
+        # channel
+        channel = channel / self.n_channels
+        # power
+        #! 有一个问题就是这个power是不是应该是power_list的index, 因为action都是index, 但是observation是power
+        mean = np.mean(self.power_list)
+        std = np.std(self.power_list)
+        power = (power - mean) / std
+        # position
+        position = position / max(self.xlim, self.ylim, self.zlim_max, self.zlim_min)
+        # SNR
+        mean = 6 #! 随机数据的结果, 不一定好
+        std = 20
+        SNR = (SNR - mean) / std
+        return channel, power, position, SNR
+
 
     def step(self, actions):
         self.channel.position_step()
         self.jammer.position_step()
         frequency_hopping_cnt = self.channel.act(actions)
-        (channel, power, position, SNR) = self.observe()
-        return self.merge_observe(channel, power, position, SNR), self.reward(SNR, frequency_hopping_cnt), self.trucated, self.done, None
+        channel, power, position, SNR = self.observe()
+        reward = self.reward(SNR, frequency_hopping_cnt)
+        channel, power, position, SNR = self.normalize_observation(channel, power, position, SNR)
+        observation = self.merge_observe(channel, power, position, SNR)
+        return observation, reward, self.trucated, self.done, None
     
     def generate_random_actions(self):
         actions = []

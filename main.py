@@ -5,5 +5,9 @@ import numpy as np
 
 if __name__ == '__main__':
     env = systemEnv()
-    (channel, power, position, SNR), info = env.reset()
-    
+    env.reset()
+    for i in range(10):
+        actions = env.generate_random_actions()
+        obs, reward, truc, done, info = env.step(actions)
+        print(obs)
+        break
