@@ -115,3 +115,16 @@ class systemEnv(gym.Env):
         frequency_hopping_cnt = self.channel.act(actions)
         (channel, power, position, SNR) = self.observe()
         return self.merge_observe(channel, power, position, SNR), self.reward(SNR, frequency_hopping_cnt), self.trucated, self.done, None
+    
+    def generate_random_actions(self):
+        actions = []
+        for i in range(self.n_clusters):
+            channel = np.random.randint(0, self.n_channels, (self.n_clusters,))
+            power = np.random.randint(0, len(self.power_list), (self.n_clusters,))
+            master = np.concatenate((channel, power), axis=0)
+            
+            channel = np.random.randint(0, self.n_channels, (self.n_slaves,))
+            power = np.random.randint(0, len(self.power_list), (self.n_slaves,))
+            slaves = np.concatenate((channel, power), axis=0)
+            actions.append(np.concatenate((master, slaves), axis=0))
+        return np.array(actions)
