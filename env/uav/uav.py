@@ -9,10 +9,13 @@ class systemEnv(gym.Env):
     """
     """
     def __init__(
-        self, n_clusters=3, n_channels=6, n_slaves=3, n_jammers=3, area_type="small_and_medium_size_cities",
+        self, episode_max=1000, n_clusters=3, n_channels=6, n_slaves=3, n_jammers=3, area_type="small_and_medium_size_cities",
         jamming_mode='Markov', fc=800*1e6, hb=50, hm=20, power_list=[36, 33, 30, 27], jammer_power = 30,
         xlim=1000, ylim=1000, zlim_max=200, zlim_min=50, max_radius=50, master_velocity=10, slave_velocity=10, moving_factor=0.1, dt=0.1, seed=None, **kwargs
     ):
+        # 定义模型参数
+        self.episode_cnt =0
+        self.episode_max = episode_max
         # 定义channel参数
         self.n_clusters = n_clusters
         self.n_channels = n_channels
@@ -72,7 +75,12 @@ class systemEnv(gym.Env):
     def observe(self):
         channel, power, position = self.channel.observe()
         SNR = self.calc_SNR() #! 这个实际上应该是 power和速率的某个函数
+        channel, power, position, SNR = np.array(channel), np.array(power), np.array(position), np.array(SNR)
         return (channel, power, position, SNR)
+
+    def merge_observe(self, channel, power, position, SNR):
+        position = position.reshape(position.shape[0], -1)
+        return np.concatenate((channel, power, position, SNR), axis=1)
 
     def reset(self):
         # jammer
@@ -89,8 +97,21 @@ class systemEnv(gym.Env):
             np.random.seed(seed)
             random.seed(seed)
 
-    def reward(self):
-        pass
+    def reward(self, SNR, frequency_hopping_cnt): #!还有改进的空间
+        return np.sum(SNR, axis=1) - frequency_hopping_cnt
+
+    @property
+    def done(self):
+        self.episode_cnt += 1
+        return self.episode_cnt >= self.episode_max
+
+    @property
+    def trucated(self):
+        return self.done
 
     def step(self, actions):
-        self.channel.Clusters.
+        self.channel.position_step()
+        self.jammer.position_step()
+        frequency_hopping_cnt = self.channel.act(actions)
+        (channel, power, position, SNR) = self.observe()
+        return self.merge_observe(channel, power, position, SNR), self.reward(SNR, frequency_hopping_cnt), self.trucated, self.done, None
