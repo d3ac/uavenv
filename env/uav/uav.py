@@ -38,17 +38,26 @@ class systemEnv(gym.Env):
         self.moving_factor = moving_factor
         self.dt = dt
         # 定义观测空间
-        part1 = spaces.Box(low=0, high=self.n_channels-1, shape=(self.n_slaves+self.n_clusters,)) # channel
-        part2 = spaces.Box(low=min(power_list), high=max(power_list), shape=(self.n_slaves,)) # power
-        part3 = spaces.Box(low=0, high=max(xlim, ylim, zlim_max, zlim_min), shape=(self.n_slaves+self.n_clusters, 3)) # position
-        part4 = spaces.Box(low=0, high=1,shape=(self.n_channels,)) #! 每个信道的增益 high是多少我还不知道 注意这个地方没有写对
-        self.observation_space = [spaces.Tuple((part1, part2, part3, part4)) for _ in range(self.n_clusters)]
+        # part1 = spaces.Box(low=0, high=self.n_channels-1, shape=(self.n_slaves+self.n_clusters,)) # channel
+        # part2 = spaces.Box(low=min(power_list), high=max(power_list), shape=(self.n_slaves,)) # power
+        # part3 = spaces.Box(low=0, high=max(xlim, ylim, zlim_max, zlim_min), shape=(self.n_slaves+self.n_clusters, 3)) # position
+        # part4 = spaces.Box(low=0, high=1,shape=(self.n_channels,))
+        # self.observation_space = [spaces.Tuple((part1, part2, part3, part4)) for _ in range(self.n_clusters)]
+        channel_num = self.n_slaves + self.n_clusters
+        pow_num = self.n_slaves + self.n_clusters
+        position_num = (self.n_slaves + self.n_clusters) * 3
+        SNR_num = self.n_slaves + self.n_clusters - 1
+        single = spaces.Box(low=-1, high=1, shape=(channel_num + pow_num + position_num + SNR_num,))
+        self.observation_space = spaces.Tuple((single for _ in range(self.n_clusters)))
         # 定义动作空间
-        part1 = spaces.Box(low=0, high=self.n_channels-1, shape=(self.n_clusters,))
-        part2 = spaces.Box(low=min(power_list), high=max(power_list), shape=(self.n_clusters,))
-        part3 = spaces.Box(low=0, high=self.n_channels-1, shape=(self.n_slaves,))
-        part4 = spaces.Box(low=min(power_list), high=max(power_list), shape=(self.n_slaves,))
-        self.action_space = [spaces.Tuple((part1, part2, part3, part4)) for _ in range(self.n_clusters)]
+        # part1 = spaces.Box(low=0, high=self.n_channels-1, shape=(self.n_clusters,))
+        # part2 = spaces.Box(low=min(power_list), high=max(power_list), shape=(self.n_clusters,))
+        # part3 = spaces.Box(low=0, high=self.n_channels-1, shape=(self.n_slaves,))
+        # part4 = spaces.Box(low=min(power_list), high=max(power_list), shape=(self.n_slaves,))
+        # self.action_space = [spaces.Tuple((part1, part2, part3, part4)) for _ in range(self.n_clusters)]
+        master = [self.n_channels for _ in range(self.n_clusters)] + [len(power_list) for _ in range(self.n_clusters)]
+        slaves = [self.n_channels for _ in range(self.n_slaves)] + [len(power_list) for _ in range(self.n_slaves)]
+        self.action_space = spaces.Tuple((spaces.MultiDiscrete(master + slaves) for _ in range(self.n_clusters)))
         # 定义
         self.channel = Channel(n_clusters, n_channels, n_slaves, area_type, fc, hb, hm, power_list, **kwargs)
         self.jammer = JammerChannel(n_jammers, n_channels, jamming_mode, area_type, fc, hb, hm, jammer_power, **kwargs)
@@ -68,7 +77,7 @@ class systemEnv(gym.Env):
                 SNR[i].append(10 * np.log10(gain / jam))
             jam = self.channel.calc_jam(i, self.jammer)
             gain = self.channel.calc_gain(i)
-            SNR[i].extend(10 * list(np.log10(np.array(gain) / np.array(jam))))
+            SNR[i].extend(list(10 * np.log10(np.array(gain) / np.array(jam))))
         return SNR
 
     def observe(self):
