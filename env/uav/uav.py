@@ -98,7 +98,7 @@ class systemEnv(gym.Env):
         channel, power, position, SNR = self.observe()
         channel, power, position, SNR = self.normalize_observation(channel, power, position, SNR)
         observation = self.merge_observe(channel, power, position, SNR)
-        return observation, None
+        return observation, {}
 
     def render(self):
         pass
@@ -113,8 +113,8 @@ class systemEnv(gym.Env):
 
     @property
     def done(self):
-        self.episode_cnt += 1
-        return self.episode_cnt >= self.episode_max
+        self.episode_cnt += 0.5 # 因为每个episode都会调用两次, 一次是done一次是truncated
+        return np.array([self.episode_cnt >= self.episode_max for _ in range(self.n_clusters)])
 
     @property
     def trucated(self):
@@ -146,7 +146,7 @@ class systemEnv(gym.Env):
         reward = self.reward(SNR, frequency_hopping_cnt)
         channel, power, position, SNR = self.normalize_observation(channel, power, position, SNR)
         observation = self.merge_observe(channel, power, position, SNR)
-        return observation, reward, self.trucated, self.done, None
+        return observation, reward, self.trucated, self.done, {}
     
     def generate_random_actions(self):
         actions = []
