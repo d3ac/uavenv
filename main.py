@@ -6,9 +6,13 @@ import numpy as np
 if __name__ == '__main__':
     env = systemEnv()
     env.reset()
-    for i in range(10000):
-        action = env.generate_random_actions()
-        obs, reward, done, _,  info = env.step(action)
-        if done[0] == True:
-            print('done', i)
-            break
+    r = []
+    # for i in range(10):
+    #     action = env.generate_random_actions()
+    #     obs, reward, done, _,  info = env.step(action)
+    #     r.append(reward)
+    # r = np.array(r).reshape(-1)
+    # print(np.mean(r), np.std(r), min(r), max(r))
+    action = env.generate_random_actions()
+    obs, reward, done, _,  info = env.step(action)
+    print(reward)

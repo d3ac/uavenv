@@ -27,7 +27,7 @@ class container():
                 self.flag = True
     
     def append(self, x):
-        x.reshape(-1)
+        x = x.reshape(-1)
         for i in x:
             self._append(i)
 
@@ -44,7 +44,7 @@ class obs_Normalizer(object):
     def __init__(self, training=True, t=None):
         self.training = training
         self.max_storage = 20000
-        if training:
+        if training: # 数据不随着reset而清除
             self.obs_channel = container(self.max_storage)
             self.obs_power = container(self.max_storage)
             self.obs_position = container(self.max_storage)
@@ -58,7 +58,6 @@ class obs_Normalizer(object):
             self.std_position = t.std_position
             self.mean_SNR = t.mean_SNR
             self.std_SNR = t.std_SNR
-        self.cnt = 0
 
     def update(self):
         self.mean_channel = self.obs_channel.mean()
@@ -71,38 +70,15 @@ class obs_Normalizer(object):
         self.std_SNR = self.obs_SNR.std()
 
     def merge_obs(self, channel, power, position, SNR):
-        position = np.array(position)
+        position = position.reshape((position.shape[0], -1))
         if self.training:
             self.obs_channel.append(channel)
             self.obs_power.append(power)
             self.obs_position.append(position)
             self.obs_SNR.append(SNR)
             self.update()
-        channel = (channel - self.mean_channel) / self.std_channel
-        power = (power - self.mean_power) / self.std_power
-        position = (position - self.mean_position) / self.std_position
-        SNR = (SNR - self.mean_SNR) / self.std_SNR
+        channel = (channel - self.mean_channel) / (self.std_channel + 1e-8)
+        power = (power - self.mean_power) / (self.std_power + 1e-8)
+        position = (position - self.mean_position) / (self.std_position + 1e-8)
+        SNR = (SNR - self.mean_SNR) / (self.std_SNR + 1e-8)
         return np.concatenate((channel, power, position, SNR), axis=1)
-
-
-class value_Normalizer(object):
-    def __init__(self, training=True, t=None):
-        self.training = training
-        self.max_storage = 20000
-        if training:
-            self.obs_value = container(self.max_storage)
-        else:
-            self.mean_value = t.mean_value
-            self.std_value = t.std_value
-        self.cnt = 0
-
-    def update(self):
-        self.mean_value = self.obs_value.mean()
-        self.std_value = self.obs_value.std()
-
-    def merge_obs(self, value):
-        if self.training:
-            self.obs_value.append(value)
-            self.update()
-        value = (value - self.mean_value) / self.std_value
-        return value
