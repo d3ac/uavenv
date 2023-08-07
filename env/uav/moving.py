@@ -1,6 +1,9 @@
 import numpy as np
 import random
 
+def distance(p1, p2):
+    return np.sqrt(np.sum(np.square(p1-p2)))
+
 class UAVMoving(object):
     """
     实现一个uav簇群的移动
@@ -16,8 +19,8 @@ class UAVMoving(object):
         self.elevation = np.zeros(shape=(n_slaves+1,))
         self.velocity = np.zeros(shape=(n_slaves+1,))
         # 移动参数
-        self.master_velocity = master_velocity 
-        self.slave_velocity = slave_velocity
+        self.master_velocity = master_velocity # 簇头移动速度
+        self.slave_velocity = slave_velocity # 从机移动速度
         self.moving_factor = moving_factor
         self.dt = dt
         # 移动限制
@@ -49,23 +52,37 @@ class UAVMoving(object):
             self.elevation[i] = np.pi * np.random.random()
             self.velocity[i] = 2 * self.slave_velocity * np.random.random()
         self.velocity[0] = 2 * self.master_velocity * np.random.random()
-    
-    def _position_step(self, RangeIter, velocity):
-        #! 搞忘了uav不能离开簇头太远了
-        for i in RangeIter:
-            def rand():
-                return np.random.random() - 0.5
+
+    def clip_to_master(self, slave_position, master_position):
+        if distance(slave_position, master_position) < self.max_radius:
+            return slave_position
+        else:
+            position = slave_position - master_position
+            position = position / (distance(position, np.zeros(shape=(3,))) + 1e-3)
+            position = position * self.max_radius
+            return position + master_position
+
+    def position_step(self):
+        # master
+        def rand():
+            return np.random.random() - 0.5
+        self.azimuth[0] = np.clip(self.azimuth[0] + 2*np.pi*rand()*self.moving_factor, 0, 2*np.pi)
+        self.elevation[0] = np.clip(self.elevation[0] + np.pi*rand()*self.moving_factor, 0, np.pi)
+        self.velocity[0] = np.clip(self.velocity[0] + self.master_velocity*rand()*self.moving_factor, 0,  2 * self.master_velocity)
+        self.position[0][0] += self.velocity[0] * np.cos(self.azimuth[0]) * np.sin(self.elevation[0]) * self.dt
+        self.position[0][1] += self.velocity[0] * np.sin(self.azimuth[0]) * np.sin(self.elevation[0]) * self.dt
+        self.position[0][2] += self.velocity[0] * np.cos(self.elevation[0]) * self.dt
+        # slave
+        for i in range(1, self.n_slaves+1):
             self.azimuth[i] = np.clip(self.azimuth[i] + 2*np.pi*rand()*self.moving_factor, 0, 2*np.pi)
             self.elevation[i] = np.clip(self.elevation[i] + np.pi*rand()*self.moving_factor, 0, np.pi)
-            self.velocity[i] = np.clip(self.velocity[i] + velocity*rand()*self.moving_factor, 0,  2 * velocity)
+            self.velocity[i] = np.clip(self.velocity[i] + self.slave_velocity*rand()*self.moving_factor, 0,  2 * self.slave_velocity)
             x = self.position[i][0] + self.velocity[i] * np.cos(self.azimuth[i]) * np.sin(self.elevation[i]) * self.dt
             y = self.position[i][1] + self.velocity[i] * np.sin(self.azimuth[i]) * np.sin(self.elevation[i]) * self.dt
             z = self.position[i][2] + self.velocity[i] * np.cos(self.elevation[i]) * self.dt
             self.position[i] = (np.clip(x, 0, self.xlim), np.clip(y, 0, self.ylim), np.clip(z, self.zlim_min, self.zlim_max))
+            self.position[i] = self.clip_to_master(self.position[i], self.position[0])
 
-    def position_step(self):
-        self._position_step((0,), self.master_velocity)
-        self._position_step(range(1, self.n_slaves+1), self.slave_velocity)
 
 class JammerMoving(object):
     def __init__(
