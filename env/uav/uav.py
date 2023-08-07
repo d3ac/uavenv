@@ -98,6 +98,7 @@ class systemEnv(gym.Env):
         channel, power, position, SNR = self.observe()
         channel, power, position, SNR = self.normalize_observation(channel, power, position, SNR)
         observation = self.merge_observe(channel, power, position, SNR)
+        self.episode_cnt = 0
         return observation, {}
 
     def render(self):
