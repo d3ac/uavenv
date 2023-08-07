@@ -43,7 +43,7 @@ class ClusterChannel(UAVMoving):
     def __init__(
         self, n_channels=6, n_slaves=3, area_type="small_and_medium_size_cities", fc=800*1e6, hb=50, hm=20, power_list=[27, 30, 33, 36],**kwargs
     ):
-        super().__init__(**kwargs)
+        super(ClusterChannel, self).__init__(**kwargs)
         # 通信参数
         self.n_channels = n_channels
         self.n_slaves = n_slaves
@@ -61,8 +61,8 @@ class ClusterChannel(UAVMoving):
         self.A, self.B, self.C = calc_pathloss_params(self.fc, self.hb, self.hm, self.area_type)
         self.calc_pathloss()
     
-    def reset(self):
-        super().reset()
+    def reset_ClusterChannel(self):
+        self.reset_UavMoving()
         self.calc_pathloss()
     
     def cluster_pathloss_interference(self, k):
@@ -127,8 +127,8 @@ class JammerChannel(JammerMoving):
         self._init_jamming()
         self.A, self.B, self.C = calc_pathloss_params(self.fc, self.hb, self.hm, self.area_type)
 
-    def reset(self):
-        super().reset()
+    def reset_JammerChannel(self):
+        self.reset_JammerMoving()
         self._init_jamming()
 
     def _init_jamming(self):
@@ -192,9 +192,9 @@ class Channel(object):
         
         self.A, self.B, self.C = calc_pathloss_params(self.fc, self.hb, self.hm, self.area_type)
 
-    def reset(self):
+    def reset_Channel(self):
         for i in range(self.n_clusters):
-            self.Clusters[i].reset()
+            self.Clusters[i].reset_ClusterChannel()
 
     def cluster_pathloss_interference_slaves(self, j, k):
         """

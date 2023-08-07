@@ -32,9 +32,9 @@ class UAVMoving(object):
         if zlim_min < max_radius:
             raise ValueError("zlim_min must be greater than max_radius")
         self.init_position = init_position
-        self.reset()
+        self.reset_UavMoving()
     
-    def reset(self):
+    def reset_UavMoving(self):
         self._init_position(self.init_position)
         self._init_moving_params()
 
@@ -107,9 +107,9 @@ class JammerMoving(object):
         self.zlim_max = zlim_max
         self.zlim_min = zlim_min
         self.init_position = init_position
-        self.reset()
+        self.reset_JammerMoving()
 
-    def reset(self):
+    def reset_JammerMoving(self):
         self._init_position(self.init_position)
         self._init_moving_params()
     

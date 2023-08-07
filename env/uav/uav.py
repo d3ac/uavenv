@@ -16,7 +16,7 @@ class systemEnv(gym.Env):
         training=True, test_obs=None, **kwargs
     ):
         # 定义模型参数
-        self.episode_cnt =0
+        self.episode_cnt = 1
         self.episode_max = episode_max
         # 定义channel参数
         self.n_clusters = n_clusters
@@ -92,13 +92,13 @@ class systemEnv(gym.Env):
 
     def reset(self):
         # jammer
-        self.jammer.reset()
-        self.channel.reset()
+        self.jammer.reset_JammerChannel()
+        self.channel.reset_Channel()
         # master和slaves通信信道
         self.channel.act(init=True)
         channel, power, position, SNR = self.observe()
         observation = self.obs_normalizer.merge_obs(channel, power, position, SNR)
-        self.episode_cnt = 0
+        self.episode_cnt = 1
         return observation, {}
 
     def render(self):
@@ -111,7 +111,7 @@ class systemEnv(gym.Env):
 
     def reward(self, SNR, frequency_hopping_cnt): #!还有改进的空间, 还有一件事就是这个reward是不是负数?为了梯度下降
         reward = np.sum(SNR, axis=1) - frequency_hopping_cnt
-        return reward
+        return (reward - 113.65684593479375) / 70.85946069952426
 
     @property
     def done(self):
