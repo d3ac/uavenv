@@ -92,7 +92,8 @@ class systemEnv(gym.Env):
 
     def reset(self):
         # jammer
-        self.jammer._init_jamming()
+        self.jammer.reset()
+        self.channel.reset()
         # master和slaves通信信道
         self.channel.act(init=True)
         channel, power, position, SNR = self.observe()

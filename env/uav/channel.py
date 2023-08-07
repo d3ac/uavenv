@@ -61,6 +61,10 @@ class ClusterChannel(UAVMoving):
         self.A, self.B, self.C = calc_pathloss_params(self.fc, self.hb, self.hm, self.area_type)
         self.calc_pathloss()
     
+    def reset(self):
+        super().reset()
+        self.calc_pathloss()
+    
     def cluster_pathloss_interference(self, k):
         """
         计算簇群内部的干扰, 第k个slave受到的干扰
@@ -123,6 +127,10 @@ class JammerChannel(JammerMoving):
         self._init_jamming()
         self.A, self.B, self.C = calc_pathloss_params(self.fc, self.hb, self.hm, self.area_type)
 
+    def reset(self):
+        super().reset()
+        self._init_jamming()
+
     def _init_jamming(self):
         if self.jamming_mode == 'Markov':
             self.transition_matrix = np.random.random(size=(self.n_jammers, self.n_channels))
@@ -183,6 +191,10 @@ class Channel(object):
         self.Clusters = [ClusterChannel(n_channels, n_slaves, area_type, fc, hb, hm) for _ in range(n_clusters)]
         
         self.A, self.B, self.C = calc_pathloss_params(self.fc, self.hb, self.hm, self.area_type)
+
+    def reset(self):
+        for i in range(self.n_clusters):
+            self.Clusters[i].reset()
 
     def cluster_pathloss_interference_slaves(self, j, k):
         """
