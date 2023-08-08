@@ -2,8 +2,8 @@ import gym
 from gym import spaces
 import numpy as np
 import random
-from env.uav.channel import Channel, JammerChannel, ClusterChannel
-from env.utils import obs_Normalizer
+from UAVenv.uav.channel import Channel, JammerChannel, ClusterChannel
+from UAVenv.utils import obs_Normalizer
 
 
 class systemEnv(gym.Env):

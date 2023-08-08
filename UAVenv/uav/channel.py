@@ -1,5 +1,5 @@
 import numpy as np
-from env.uav.moving import UAVMoving, JammerMoving
+from UAVenv.uav.moving import UAVMoving, JammerMoving
 
 def generate_rayleigh_fading():
     return - float(20 * np.log10(np.random.rayleigh(1/1.414, size=(1)))) # 后面都是加, 所以这里要加负号
