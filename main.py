@@ -17,5 +17,10 @@ def get_random_data(env, n):
 
 if __name__ == '__main__':
     env1 = systemEnv()
-    env1.reset(0)
+    env1.reset(None)
     rewards = []
+    for i in range(10):
+        action = env1.generate_random_actions()
+        obs, reward, done, _, info = env1.step(action)
+        rewards.append(reward.mean())
+    print(rewards)

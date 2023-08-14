@@ -88,7 +88,7 @@ class systemEnv(gym.Env):
         channel, power, position, SNR = np.array(channel), np.array(power), np.array(position), np.array(SNR)
         return (channel, power, position, SNR)
 
-    def reset(self, seed):
+    def reset(self, seed=None):
         # 设置种子
         self.seed(seed)
         # jammer
@@ -104,7 +104,7 @@ class systemEnv(gym.Env):
     def render(self):
         pass
 
-    def seed(self, seed=None):
+    def seed(self, seed=None): # 传入None就是每局都是随机值
         if seed is not None:
             np.random.seed(seed)
             random.seed(seed)
