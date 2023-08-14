@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import tqdm
 
-def get_random_data(n):
+def get_random_data(env, n):
     r = []
     trange = tqdm.tqdm(range(n))
     for i in trange:
@@ -16,6 +16,6 @@ def get_random_data(n):
     print(np.mean(r), np.std(r))
 
 if __name__ == '__main__':
-    env = systemEnv()
-    env.reset()
-    get_random_data(5000)
+    env1 = systemEnv()
+    env1.reset(0)
+    rewards = []
