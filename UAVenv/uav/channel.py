@@ -28,13 +28,14 @@ def calc_pathloss_params(fc, hb, hm, area_type="small_and_medium_size_cities"):
     #         C = -4.78*(np.log10(fc))**2 + 18.33*np.log10(fc) - 40.98
     # A = 69.55 + 26.16 * np.log10(fc) - 13.82 * np.log10(hb) - ahm
     # B = 44.9 - 6.55 * np.log10(hb)
-    A = 63.8
+    # 自己定的 : A 63.8, B 20.9, C 0
+    A = 103.8
     B = 20.9
     C = 0
     return A, B, C
 
 def pathloss_function(A, B, C, d): #! 自己定的, 有待改进
-    return A + B * np.log10(d/10000 + 1e-3) + C
+    return A + B * np.log10(d/1000 + 1e-3) + C
 
 class ClusterChannel(UAVMoving):
     """

@@ -110,8 +110,8 @@ class systemEnv(gym.Env):
             random.seed(seed)
 
     def reward(self, SNR, frequency_hopping_cnt): #!还有改进的空间, 还有一件事就是这个reward是不是负数?为了梯度下降
-        reward = np.sum(SNR, axis=1) - frequency_hopping_cnt
-        return (reward - 113.65684593479375) / 70.85946069952426
+        reward = np.sum(SNR, axis=1) - frequency_hopping_cnt * 10
+        return (reward - 182.2211615095386) / 129.88007061640215
 
     @property
     def done(self):

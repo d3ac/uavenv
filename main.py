@@ -16,11 +16,12 @@ def get_random_data(env, n):
     print(np.mean(r), np.std(r))
 
 if __name__ == '__main__':
-    env1 = systemEnv()
-    env1.reset(None)
+    env = systemEnv()
+    env.reset(None)
     rewards = []
-    for i in range(10):
-        action = env1.generate_random_actions()
-        obs, reward, done, _, info = env1.step(action)
-        rewards.append(reward.mean())
-    print(rewards)
+    # for i in range(10):
+    #     action = env1.generate_random_actions()
+    #     obs, reward, done, _, info = env1.step(action)
+    #     rewards.append(reward.mean())
+    # print(rewards)
+    get_random_data(env, 100000)
