@@ -44,7 +44,7 @@ class ClusterChannel(UAVMoving):
     def __init__(
         self, n_channels=6, n_slaves=3, area_type="small_and_medium_size_cities", fc=800*1e6, hb=50, hm=20, power_list=[27, 30, 33, 36],**kwargs
     ):
-        super(ClusterChannel, self).__init__(**kwargs)
+        super(ClusterChannel, self).__init__(n_slaves=n_slaves, xlim=1000, ylim=1000, zlim_max=200, zlim_min=50, max_radius=50, master_velocity=10, slave_velocity=10, moving_factor=0.1, dt=0.1, **kwargs)
         # 通信参数
         self.n_channels = n_channels
         self.n_slaves = n_slaves
@@ -57,8 +57,8 @@ class ClusterChannel(UAVMoving):
         self.power_list = power_list
         self.channel_power = np.zeros(shape=(n_slaves,), dtype=np.int32)
         self.channel_select = np.zeros(shape=(n_slaves,), dtype=np.int32)
-        if n_channels < n_slaves:
-            raise ValueError("The number of channels should be greater than the number of slaves.")
+        # if n_channels < n_slaves:
+            # raise ValueError("The number of channels should be greater than the number of slaves.")
         self.A, self.B, self.C = calc_pathloss_params(self.fc, self.hb, self.hm, self.area_type)
         self.calc_pathloss()
     
@@ -102,7 +102,7 @@ class ClusterChannel(UAVMoving):
             return cnt
         else:
             self.channel_power = [np.random.choice(self.power_list) for _ in range(self.n_slaves)]
-            self.channel_select = np.random.choice(self.n_channels, size=(self.n_slaves,), replace=False)
+            self.channel_select = np.random.choice(self.n_channels, size=(self.n_slaves,), replace=True)
     
     def observe(self):
         return (self.channel_select, self.channel_power, self.position)
@@ -115,7 +115,7 @@ class JammerChannel(JammerMoving):
     def __init__(
         self, n_jammers=3, n_channels=6, jamming_mode='Markov', area_type="small_and_medium_size_cities", fc=800*1e6, hb=50, hm=20, jammer_power=30, **kwargs
     ):
-        super().__init__(**kwargs)
+        super().__init__(n_jammers=n_jammers, init_position=None, xlim=1000, ylim=1000, zlim_max=200, zlim_min=50, jammer_velocity=10, moving_factor=0.1, dt=0.1)
         self.n_jammers = n_jammers
         self.n_channels = n_channels
         self.area_type = area_type

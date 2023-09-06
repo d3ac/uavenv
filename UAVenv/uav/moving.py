@@ -39,14 +39,14 @@ class UAVMoving(object):
         self._init_moving_params()
 
     def _init_position(self, init_potision=None):
-        self.position[0] = init_potision if init_potision is not None else (random.uniform(0,self.xlim),random.uniform(0,self.ylim),random.uniform(self.zlim_min,self.zlim_max))
+        self.position[0] = init_potision if init_potision is not None else (random.uniform(0,self.xlim), random.uniform(0,self.ylim), random.uniform(self.zlim_min, self.zlim_max))
         for i in range(1, self.n_slaves+1):
             azimuth =  2 * np.pi * np.random.random()
             elevation = np.pi * np.random.random()
             radius = self.max_radius * np.cbrt(np.random.random()) # 开立方根生成的半径才能保证在立方体内均匀分布
-            x = radius * np.cos(azimuth) * np.sin(elevation)
-            y = radius * np.sin(azimuth) * np.sin(elevation)
-            z = radius * np.cos(elevation)
+            x = radius * np.cos(azimuth) * np.sin(elevation) + self.position[0][0]
+            y = radius * np.sin(azimuth) * np.sin(elevation) + self.position[0][1]
+            z = radius * np.cos(elevation) + self.position[0][2]
             self.position[i] = (x,y,z)
     
     def _init_moving_params(self):
